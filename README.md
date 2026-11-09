@@ -49,8 +49,15 @@ flowchart LR
 
 当前 5 个调用 Workflow 引用中心仓库 `@main`，会随中心更新。需要不可变版本时，可改成中心仓库的 release tag 或 commit SHA。
 
-## 设计文档
+## 设计文档（SDD）
 
-- [组织级复用设计](docs/superpowers/specs/2026-11-06-org-auto-dev-design.md)
-- [组织级实施计划](docs/superpowers/plans/2026-11-06-org-auto-dev.md)
-- [初始流水线设计（历史）](docs/superpowers/specs/2026-11-05-auto-dev-pipeline-design.md)
+增量规格与实施计划统一维护在 **`docs/SDD/`**（格式见 dev-standards · sdd）：
+
+| 主题 | 规格 | 实施计划 |
+| --- | --- | --- |
+| IPQC 智能工作台 | [26-11-05 IPQC智能工作台](docs/SDD/规格文档/26-11-05%20IPQC智能工作台.md) | [实现计划](docs/SDD/实施计划/26-11-05%20IPQC智能工作台%20实现计划.md) |
+| 组织级自动开发流水线 | [26-11-06 组织级自动开发流水线](docs/SDD/规格文档/26-11-06%20组织级自动开发流水线.md) | [实现计划](docs/SDD/实施计划/26-11-06%20组织级自动开发流水线%20实现计划.md) |
+
+- 原型基线：[docs/原型/IPQC智能工作台1-2026-11-5.html](docs/原型/IPQC智能工作台1-2026-11-5.html)
+- 业务约定：[docs/项目-业务约定.md](docs/项目-业务约定.md)
+- 历史（superpowers，只读）：[docs/superpowers/](docs/superpowers/)

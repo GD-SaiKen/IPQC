@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="page-scroll">
     <div v-if="meta" class="kpi-grid">
       <div class="kpi-card">
         <div class="label">检验批次</div>

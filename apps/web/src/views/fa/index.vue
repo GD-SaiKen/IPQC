@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="page-scroll">
     <el-alert
       v-if="workshopKey === '注塑毛边'"
       title="首件源表未覆盖该责任区"

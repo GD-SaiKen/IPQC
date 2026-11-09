@@ -1,4 +1,5 @@
 <template>
+  <div class="page-scroll">
   <div class="page-card">
     <h3>数据与设置</h3>
     <p class="muted">本机 localStorage 自动保存；建议每月导出 JSON 备份。</p>
@@ -11,6 +12,7 @@
     <ul class="counts">
       <li v-for="c in counts" :key="c[0]">{{ c[0] }}：{{ c[1] }}</li>
     </ul>
+  </div>
   </div>
 </template>
 

@@ -1,6 +1,17 @@
 <template>
-  <div class="page-card">
-    <h3 v-if="title">{{ title }}</h3>
+  <SectionCard v-if="title" :title="title">
+    <el-table :data="data" size="small" stripe max-height="480" v-bind="$attrs">
+      <el-table-column
+        v-for="col in columns"
+        :key="col.prop"
+        :prop="col.prop"
+        :label="col.label"
+        :width="col.width"
+        :min-width="col.minWidth"
+      />
+    </el-table>
+  </SectionCard>
+  <div v-else class="page-card">
     <el-table :data="data" size="small" stripe max-height="480" v-bind="$attrs">
       <el-table-column
         v-for="col in columns"
@@ -15,6 +26,8 @@
 </template>
 
 <script setup lang="ts">
+import SectionCard from '@/components/section-card/section-card.vue'
+
 defineProps<{
   title?: string
   data: Record<string, unknown>[]
@@ -22,8 +35,3 @@ defineProps<{
 }>()
 </script>
 
-<style scoped>
-h3 {
-  margin: 0 0 12px;
-}
-</style>

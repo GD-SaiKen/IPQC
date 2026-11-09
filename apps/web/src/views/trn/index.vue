@@ -1,6 +1,8 @@
 <template>
-  <IpqcSimpleTable title="培训资料" :data="mats" :columns="matCols" />
-  <IpqcSimpleTable title="培训实施" :data="trn" :columns="trnCols" />
+  <div class="page-scroll">
+    <IpqcSimpleTable title="培训资料" :data="mats" :columns="matCols" />
+    <IpqcSimpleTable title="培训实施" :data="trn" :columns="trnCols" />
+  </div>
 </template>
 
 <script setup lang="ts">

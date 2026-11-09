@@ -1,6 +1,8 @@
 <template>
-  <IpqcSimpleTable title="点检排名（最近一次实测）" :data="rows" :columns="cols" />
-  <p class="note">毛边适用项 1–9 月 40 分、10 月起 60 分；6 个责任区同一评分制，目标 100 分。</p>
+  <div class="page-scroll">
+    <IpqcSimpleTable title="点检排名（最近一次实测）" :data="rows" :columns="cols" />
+    <p class="note">毛边适用项 1–9 月 40 分、10 月起 60 分；6 个责任区同一评分制，目标 100 分。</p>
+  </div>
 </template>
 
 <script setup lang="ts">

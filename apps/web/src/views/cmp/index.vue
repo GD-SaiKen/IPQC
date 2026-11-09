@@ -1,9 +1,11 @@
 <template>
+  <div class="page-scroll">
   <IpqcSimpleTable
     title="投诉闭环台账"
     :data="rows"
     :columns="cols"
   />
+  </div>
 </template>
 
 <script setup lang="ts">

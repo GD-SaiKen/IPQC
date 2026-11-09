@@ -1,10 +1,9 @@
 <template>
-  <div>
+  <div class="page-scroll">
     <div v-if="ws" class="ws-banner" :style="{ borderLeftColor: ws.color }">
       <i class="wsdot" :style="{ background: ws.color }" />
       <b>{{ ws.name }} · 子工作台</b>
       <span class="muted">负责人 {{ ws.owner }} · CE {{ ws.ce }}</span>
-      <el-button size="small" style="margin-left: auto" @click="backToBoard">← 总看板</el-button>
     </div>
 
     <div class="kpi-grid">
@@ -69,7 +68,7 @@ import type { WorkshopKey } from '@/domain/ipqc/types'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
-const { backToBoard } = useWorkshopRoute()
+useWorkshopRoute()
 
 const workshopKey = computed(() => store.workshop as WorkshopKey)
 const ws = computed(() => WS_MAP[workshopKey.value])

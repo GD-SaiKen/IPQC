@@ -1,5 +1,7 @@
 <template>
-  <IpqcSimpleTable title="绩效加减分明细（节选）" :data="rows" :columns="cols" />
+  <div class="page-scroll">
+    <IpqcSimpleTable title="绩效加减分明细（节选）" :data="rows" :columns="cols" />
+  </div>
 </template>
 
 <script setup lang="ts">

@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="page-scroll">
     <div class="page-card">
       <p class="muted">2026 年 1–10 月 · 六项指标按月汇总。点车间行进入子工作台。</p>
       <el-radio-group v-model="month" size="small" @change="onMonth">

@@ -4,6 +4,18 @@ IPQC 已迁移到 `GD-SaiKen` 组织，并使用组织级中心仓库 [GD-SaiKen
 
 本仓库只保留 5 个薄 Workflow，负责接收事件、传递参数和授权；方案、开发、评审、修复、合并的完整实现由中心仓库统一维护。
 
+## 前端应用（IPQC 智能质量工作台）
+
+```bash
+pnpm install
+pnpm extract-seed   # 从 docs/原型 HTML 抽取 real/fqc 等种子 JSON
+pnpm dev            # http://localhost:5173
+pnpm test
+pnpm build
+```
+
+工程路径：`apps/web`（Vue 3 + Element Plus + Pinia，数据存 localStorage）。
+
 ## 流程
 
 ```mermaid
@@ -55,7 +67,7 @@ flowchart LR
 
 | 主题 | 规格 | 实施计划 |
 | --- | --- | --- |
-| IPQC 智能工作台 | [26-11-05 IPQC智能工作台](docs/SDD/规格文档/26-11-05%20IPQC智能工作台.md) | [实现计划](docs/SDD/实施计划/26-11-05%20IPQC智能工作台%20实现计划.md) |
+| IPQC 智能质量工作台 | [26-11-09 IPQC智能质量工作台](docs/SDD/规格文档/26-11-09%20IPQC智能质量工作台.md) | [实现计划](docs/SDD/实施计划/26-11-05%20IPQC智能工作台%20实现计划.md) |
 | 组织级自动开发流水线 | [26-11-06 组织级自动开发流水线](docs/SDD/规格文档/26-11-06%20组织级自动开发流水线.md) | [实现计划](docs/SDD/实施计划/26-11-06%20组织级自动开发流水线%20实现计划.md) |
 
 - 原型基线：[docs/原型/IPQC智能工作台1-2026-11-5.html](docs/原型/IPQC智能工作台1-2026-11-5.html)

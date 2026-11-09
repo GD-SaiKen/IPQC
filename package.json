@@ -1,0 +1,12 @@
+{
+  "name": "ipqc-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @ipqc/web dev",
+    "build": "pnpm --filter @ipqc/web build",
+    "test": "pnpm --filter @ipqc/web test",
+    "lint": "pnpm --filter @ipqc/web lint",
+    "extract-seed": "node scripts/extract-prototype-seed.mjs"
+  }
+}

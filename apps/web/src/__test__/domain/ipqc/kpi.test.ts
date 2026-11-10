@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultDb, getCheckScores } from '@/domain/ipqc/seed'
-import { allKpi, wsKpi } from '@/domain/ipqc/kpi'
+import { allKpi, boardAlerts, wsKpi } from '@/domain/ipqc/kpi'
 import { boardMatrix, checkTrend, complaintTrend, heatOf } from '@/domain/ipqc/trend'
 
 describe('kpi', () => {
@@ -59,5 +59,22 @@ describe('kpi · 热力矩阵与走势', () => {
     const jan = allKpi(db, scores, 1)
     const feb = allKpi(db, scores, 2)
     expect(jan.cmpN).not.toBe(feb.cmpN)
+  })
+})
+
+describe('kpi · 关注区汇总', () => {
+  const db = createDefaultDb()
+  const scores = getCheckScores()
+
+  it('终检超 3% 与投诉未结多于阈值时给出其余汇总', () => {
+    const list = boardAlerts(db, scores, 0)
+    const fq = list.filter((a) => a.t.includes('终检批次不良率'))
+    expect(fq.length).toBeGreaterThan(2)
+    expect(fq.some((a) => a.t === '其余车间终检批次不良率超 3%')).toBe(true)
+    expect(list.some((a) => a.t === '其余车间投诉未结案')).toBe(true)
+  })
+
+  it('关注区最多 9 条', () => {
+    expect(boardAlerts(db, scores, 0).length).toBeLessThanOrEqual(9)
   })
 })

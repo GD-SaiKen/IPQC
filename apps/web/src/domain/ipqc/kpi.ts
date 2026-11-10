@@ -168,6 +168,15 @@ export function boardAlerts(
       ws: o.w.key,
     })
   )
+  if (fqBad.length > 2) {
+    const rest = fqBad.slice(2)
+    out.push({
+      pri: 2,
+      lv: 'dan',
+      t: '其余车间终检批次不良率超 3%',
+      d: `${rest.length} 个车间 · ${rest.map((o) => `${o.w.name} ${o.k.fqcRate?.toFixed(2)}%`).join('、')}`,
+    })
+  }
 
   const openList = WORKSHOPS.map((w) => ({ w, k: wsKpi(db, checkScores, w.key, m) }))
     .filter((o) => o.k.cmpOpen > 0)
@@ -181,6 +190,15 @@ export function boardAlerts(
       ws: o.w.key,
     })
   )
+  if (openList.length > 3) {
+    const rest = openList.slice(3)
+    out.push({
+      pri: 3,
+      lv: 'dan',
+      t: '其余车间投诉未结案',
+      d: `${rest.length} 个车间 · 共 ${sum(rest, (o) => o.k.cmpOpen)} 批未结`,
+    })
+  }
 
   return out.sort((x, y) => x.pri - y.pri).slice(0, 9)
 }

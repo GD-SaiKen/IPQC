@@ -2,8 +2,9 @@ import { allKpi, wsKpi } from './kpi'
 import { cmpMonthlyTrend } from './cmp'
 import { chkMonthScore } from './check'
 import { fqcMonthStats } from './fqc'
+import { inMonth, pct } from './format'
 import { MONTHS, WORKSHOPS } from './workshops'
-import type { CheckScores, IpqcDb, WorkshopFilter, WorkshopKey } from './types'
+import type { CheckScores, FqcNgRow, IpqcDb, WorkshopFilter, WorkshopKey } from './types'
 
 export interface BoardMetric {
   k: string
@@ -130,12 +131,19 @@ export interface FqcTrend {
   rate: number[]
 }
 
-export function fqcTrend(keys: string[], months: readonly number[] = MONTHS): FqcTrend {
-  const stats = fqcMonthStats(keys)
-  const byMonth = new Map(stats.map((s) => [s.m, s]))
+export function fqcTrend(
+  rows: FqcNgRow[],
+  keys: string[],
+  months: readonly number[] = MONTHS
+): FqcTrend {
+  const lotsByMonth = new Map(fqcMonthStats(keys).map((s) => [s.m, s.lots]))
+  const ng = months.map((m) => rows.filter((r) => inMonth(r.d, m)).length)
   return {
     labels: months.map((m) => `${m}月`),
-    ng: months.map((m) => byMonth.get(m)?.ng ?? 0),
-    rate: months.map((m) => +(byMonth.get(m)?.rate ?? 0).toFixed(2)),
+    ng,
+    rate: months.map((m, i) => {
+      const lots = lotsByMonth.get(m) || 0
+      return +(lots ? pct(ng[i], lots) : 0).toFixed(2)
+    }),
   }
 }

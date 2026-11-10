@@ -212,7 +212,15 @@ function tabCount(k: string): number {
   return skillList.value.length
 }
 
-const DEPT_OPTS = ['通用', ...WORKSHOPS.map((w) => w.key)]
+const DEPT_OPTS = Array.from(
+  new Set([
+    '通用',
+    ...WORKSHOPS.map((w) => w.key),
+    ...store.db.mat.map((m) => String(m.dept ?? '')),
+    ...store.db.trn.map((r) => String(r.dept ?? '')),
+    ...store.db.exam.map((e) => String(e.dept ?? '')),
+  ].filter(Boolean))
+)
 const matColumns: EditColumn[] = [
   { key: 't', label: '资料名称', width: 240 },
   { key: 'dept', label: '适用车间', width: 100, type: 'select', options: DEPT_OPTS },
@@ -229,7 +237,7 @@ const matColumns: EditColumn[] = [
 ]
 const trnColumns: EditColumn[] = [
   { key: 'date', label: '日期', width: 100 },
-  { key: 'dept', label: '车间', width: 96, type: 'select', options: WORKSHOPS.map((w) => w.key) },
+  { key: 'dept', label: '车间', width: 96, type: 'select', options: DEPT_OPTS },
   { key: 'topic', label: '培训主题', width: 220 },
   { key: 'trainer', label: '讲师', width: 90 },
   { key: 'num', label: '人次', width: 76, type: 'num' },
@@ -246,7 +254,7 @@ const trnColumns: EditColumn[] = [
 const examColumns: EditColumn[] = [
   { key: 'date', label: '日期', width: 100 },
   { key: 'who', label: '姓名', width: 90 },
-  { key: 'dept', label: '车间', width: 96, type: 'select', options: WORKSHOPS.map((w) => w.key) },
+  { key: 'dept', label: '车间', width: 96, type: 'select', options: DEPT_OPTS },
   { key: 'subject', label: '考核科目', width: 200 },
   { key: 'score', label: '得分', width: 76, type: 'num' },
   { key: 'level', label: '等级', width: 76, type: 'select', options: ['A', 'B', 'C'] },

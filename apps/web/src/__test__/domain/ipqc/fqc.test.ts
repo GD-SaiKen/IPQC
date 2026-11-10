@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   aggFqc,
+  allFqcRows,
   deptsHas,
+  FQC_KEYS,
   fqcCat,
   fqcHighRiskRows,
   fqcMonthStats,
   fqcNgInMonth,
   fqcParetoFromRows,
+  fqcPartsFromRows,
   fqcRateRow,
   fqcKeysOf,
 } from '@/domain/ipqc/fqc'
+import { fqcTrend } from '@/domain/ipqc/trend'
 
 describe('fqc', () => {
   it('一车间一本；全厂为 6 本相加', () => {
@@ -40,9 +44,43 @@ describe('fqc', () => {
     expect(rows.find((x) => x.n === '尺寸不良')?.cnt).toBe(1)
   })
 
-  it('单条不良率 ≥20% 触发高不良', () => {
-    const rows = fqcHighRiskRows([{ samp: 50, bad: 10 }, { samp: 100, bad: 5 }])
-    expect(rows.length).toBe(1)
+  it('单条清查记录不良率 ≥20% 触发高不良', () => {
+    const rows = fqcHighRiskRows([
+      { stock: 50, ng: 10 },
+      { stock: 100, ng: 5 },
+      { stock: 0, ng: 3 },
+    ])
+    expect(rows).toEqual([{ stock: 50, ng: 10 }])
+  })
+
+  it('种子 NG 明细条数与台账 NG 批一致', () => {
+    const book = aggFqc(FQC_KEYS)
+    expect(allFqcRows().length).toBe(book?.meta.ng)
+    expect(allFqcRows().length).toBeGreaterThan(0)
+  })
+
+  it('NG TOP 零件按明细聚合 NG 批与不良 pcs', () => {
+    const rows = fqcPartsFromRows(
+      [
+        { pn: 'A', bad: 2 },
+        { pn: 'A', bad: 3 },
+        { pn: 'B', bad: 9 },
+      ],
+      { A: 80 }
+    )
+    expect(rows[0]).toMatchObject({ pn: 'A', ng: 2, bad: 5, lots: 80 })
+    expect(rows[1]).toMatchObject({ pn: 'B', ng: 1, bad: 9, lots: 1 })
+  })
+
+  it('月度走势按 NG 明细聚合，分母取台账批次', () => {
+    const t = fqcTrend(
+      [{ d: '2026-01-02' }, { d: '2026-01-03' }, { d: '2026-02-01' }],
+      ['注塑']
+    )
+    expect(t.ng.length).toBe(10)
+    expect(t.ng[0]).toBe(2)
+    expect(t.ng[1]).toBe(1)
+    expect(t.rate[0]).toBeCloseTo((2 / 3208) * 100, 2)
   })
 
   it('不良描述归入固定类别', () => {

@@ -183,9 +183,15 @@ const passRate = computed(() =>
 const attrStats = computed(() => perfAttrStats(detailList.value))
 
 const ATTR_OPTS = Array.from(new Set([...PERF_ATTRS, ...store.db.perf.map((p) => p.attr)]))
+const DEPT_OPTS = Array.from(
+  new Set([
+    ...WORKSHOPS.map((w) => w.key),
+    ...store.db.perf.map((p) => String(p.dept ?? '')),
+  ].filter(Boolean))
+)
 const columns: EditColumn[] = [
   { key: 'date', label: '日期', width: 100 },
-  { key: 'dept', label: '车间', width: 96, type: 'select', options: WORKSHOPS.map((w) => w.key) },
+  { key: 'dept', label: '车间', width: 96, type: 'select', options: DEPT_OPTS },
   { key: 'who', label: '姓名', width: 92 },
   { key: 'attr', label: '维度', width: 104, type: 'select', options: ATTR_OPTS },
   { key: 'item', label: '事项', width: 260 },

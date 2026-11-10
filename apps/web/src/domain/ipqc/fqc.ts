@@ -240,11 +240,39 @@ export function fqcDisposalStats(rows: FqcNgRow[]): FqcDisposalStat {
   return out
 }
 
-export function fqcHighRiskRows(rows: FqcNgRow[], threshold = 20): FqcNgRow[] {
-  return rows.filter((r) => {
-    const samp = num(r.samp)
-    return samp > 0 && pct(num(r.bad), samp) >= threshold
+/** 高不良以「清查记录」口径判断：不良数 / 库存 ≥ 阈值 */
+export function fqcHighRiskRows<T extends { stock?: unknown; ng?: unknown }>(
+  rows: T[],
+  threshold = 20
+): T[] {
+  return rows.filter((r) => fqcRateRow(r) >= threshold)
+}
+
+export interface FqcPartStat {
+  pn: string
+  ng: number
+  lots: number
+  bad: number
+}
+
+/** NG TOP 零件按明细聚合；检验批优先取台账号，缺失时退回 NG 批数 */
+export function fqcPartsFromRows(
+  rows: FqcNgRow[],
+  lotsMap: Record<string, number> = {}
+): FqcPartStat[] {
+  const map: Record<string, FqcPartStat> = {}
+  rows.forEach((r) => {
+    const pn = String(r.pn || '—')
+    const t = map[pn] || (map[pn] = { pn, ng: 0, lots: 0, bad: 0 })
+    t.ng++
+    t.bad += num(r.bad)
   })
+  Object.keys(map).forEach((k) => {
+    map[k].lots = lotsMap[k] || map[k].ng
+  })
+  return Object.keys(map)
+    .map((k) => map[k])
+    .sort((a, b) => b.ng - a.ng)
 }
 
 export function fqcBookOf(keys: string[]) {

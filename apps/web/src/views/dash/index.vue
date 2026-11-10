@@ -105,12 +105,12 @@ import { useWorkshopRoute } from '@/composables/use-workshop-route'
 import { chkLatest, chkScaleText } from '@/domain/ipqc/check'
 import { cmpStats } from '@/domain/ipqc/cmp'
 import { faStats, FA_STEPS } from '@/domain/ipqc/fa-rules'
-import { fqcCat, fqcHighRiskRows, fqcKeysOf } from '@/domain/ipqc/fqc'
-import { fp, pct, shortDept } from '@/domain/ipqc/format'
+import { fqcCat, fqcHighRiskRows, fqcKeysOf, fqcRateRow, deptsHas } from '@/domain/ipqc/fqc'
+import { fp, shortDept } from '@/domain/ipqc/format'
 import { allKpi, wsKpi } from '@/domain/ipqc/kpi'
 import { computePerf } from '@/domain/ipqc/perf'
 import { WS_MAP } from '@/domain/ipqc/workshops'
-import type { FqcNgRow, WorkshopFilter } from '@/domain/ipqc/types'
+import type { FqcClearRow, FqcNgRow, WorkshopFilter } from '@/domain/ipqc/types'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
@@ -149,6 +149,13 @@ const chkScale = computed(() =>
 const fqcRows = computed(() => {
   const keys = fqcKeysOf(key.value)
   return (store.db.fqcNg as FqcNgRow[]).filter((r) => keys.includes(String(r.ws || '')))
+})
+
+const clearRows = computed(() => {
+  const all = store.db.fqc as FqcClearRow[]
+  return isAll.value
+    ? all
+    : all.filter((r) => deptsHas(r, key.value))
 })
 
 const fqcTop = computed(() => {
@@ -190,9 +197,9 @@ const alerts = computed<AlertRow[]>(() => {
       view: 'fqc',
     })
   }
-  const high = fqcHighRiskRows(fqcRows.value)
+  const high = fqcHighRiskRows(clearRows.value)
   if (high.length) {
-    const top = high.slice(0, 2).map((r) => `${r.pn || '—'} ${fp(pct(Number(r.bad), Number(r.samp)), 1)}%`)
+    const top = high.slice(0, 2).map((r) => `${r.pn || '—'} ${fp(fqcRateRow(r), 1)}%`)
     out.push({
       lv: 'dan',
       t: '终检单条高不良（≥20%）',

@@ -10,14 +10,35 @@ function cellValue(row: Record<string, unknown>, col: CsvColumn): string {
   return v == null ? '' : String(v)
 }
 
+/** 防公式 / DDE 注入：Excel 会把 = + - @ 开头的文本当公式执行 */
+function safeCell(text: string): string {
+  if (/^[=+\-@\t\r]/.test(text) && !/^-\d+(\.\d+)?$/.test(text)) return `'${text}`
+  return text
+}
+
 export function buildCsv(columns: CsvColumn[], rows: Record<string, unknown>[]): string {
   const head = columns.map((c) => c.label).join(',')
   const body = rows.map((row) =>
     columns
-      .map((c) => `"${cellValue(row, c).replace(/"/g, '""')}"`)
+      .map((c) => `"${safeCell(cellValue(row, c)).replace(/"/g, '""')}"`)
       .join(',')
   )
   return [head, ...body].join('\r\n')
+}
+
+function saveUrl(url: string, filename: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
+  saveUrl(URL.createObjectURL(blob), filename)
 }
 
 export function downloadCsv(
@@ -28,10 +49,5 @@ export function downloadCsv(
   const blob = new Blob([`\ufeff${buildCsv(columns, rows)}`], {
     type: 'text/csv;charset=utf-8',
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${fileBase}_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${fileBase}_${new Date().toISOString().slice(0, 10)}.csv`)
 }

@@ -19,7 +19,7 @@
       </div>
       <div class="kpi-card" :class="batchRate != null && batchRate > 3 ? 'dan' : ''">
         <div class="label">NG 批</div>
-        <div class="value">{{ mn('ng') ?? '—' }}</div>
+        <div class="value">{{ meta ? ngCount : '—' }}</div>
         <div class="muted small">批次不良率 {{ fmtPct(batchRate, 2) }}</div>
       </div>
       <div class="kpi-card" :class="batchRate != null && batchRate > 3 ? 'dan' : ''">
@@ -51,7 +51,7 @@
     </div>
     <div v-if="highRisk.length" class="banner banner--warn">
       高不良记录 {{ highRisk.length }} 条：
-      {{ highRisk.slice(0, 3).map((r) => `${r.pn || '—'} ${fmtPct(pct(Number(r.bad), Number(r.samp)))}`).join('、') }}
+      {{ highRisk.slice(0, 3).map((r) => `${r.pn || '—'} ${fmtPct(fqcRateRow(r))}`).join('、') }}
       <template v-if="highRisk.length > 3"> 等</template>
     </div>
 
@@ -162,10 +162,12 @@ import {
   fqcHighRiskRows,
   fqcInspectorStats,
   fqcKeysOf,
+  fqcParetoFromRows,
+  fqcPartsFromRows,
   fqcRateRow,
 } from '@/domain/ipqc/fqc'
 import type { FqcClearRow, FqcNgRow } from '@/domain/ipqc/types'
-import { fp, pct } from '@/domain/ipqc/format'
+import { fp, num, pct, sum } from '@/domain/ipqc/format'
 import { fqcTrend } from '@/domain/ipqc/trend'
 import { WORKSHOPS } from '@/domain/ipqc/workshops'
 import { useIpqcStore } from '@/stores/ipqc'
@@ -176,6 +178,14 @@ const keys = computed(() => fqcKeysOf(key.value))
 const book = computed(() => aggFqc(keys.value))
 const bookCount = computed(() => keys.value.length)
 
+const ngList = computed(() =>
+  (store.db.fqcNg as FqcNgRow[]).filter((r) =>
+    keys.value.includes(String(r.ws || '注塑'))
+  )
+)
+const ngCount = computed(() => ngList.value.length)
+const badTotal = computed(() => sum(ngList.value, (r) => num(r.bad)))
+
 const meta = computed(
   () => (book.value?.meta || null) as Record<string, unknown> | null
 )
@@ -185,13 +195,11 @@ function mn(k: string): number | null {
 }
 const batchRate = computed(() => {
   const lots = mn('lots')
-  const ng = mn('ng')
-  return lots ? pct(ng || 0, lots) : null
+  return lots ? pct(ngCount.value, lots) : null
 })
 const pieceRate = computed(() => {
   const samp = mn('samp')
-  const bad = mn('bad')
-  return samp ? pct(bad || 0, samp) : null
+  return samp ? pct(badTotal.value, samp) : null
 })
 const recheckRate = computed(() => {
   const n = mn('recheck')
@@ -199,33 +207,31 @@ const recheckRate = computed(() => {
   return n ? pct(ok || 0, n) : null
 })
 
-const trend = computed(() => fqcTrend(keys.value))
+const trend = computed(() => fqcTrend(ngList.value, keys.value))
 
-const pareto = computed(() => {
-  const list = (book.value?.pareto || []) as { n: string; cnt: number }[]
-  return [...list].sort((a, b) => b.cnt - a.cnt)
-})
+const pareto = computed(() => fqcParetoFromRows(ngList.value))
 const parts = computed(() => {
-  const list = (book.value?.parts || []) as { pn: string; ng: number; lots: number; bad: number }[]
-  return [...list].sort((a, b) => b.ng - a.ng)
+  const lotsMap: Record<string, number> = {}
+  ;(book.value?.parts || []).forEach((p) => {
+    lotsMap[p.pn] = p.lots
+  })
+  return fqcPartsFromRows(ngList.value, lotsMap)
 })
 
-const ngList = computed(() =>
-  (store.db.fqcNg as FqcNgRow[]).filter((r) =>
-    keys.value.includes(String(r.ws || '注塑'))
-  )
-)
 const ngRows = computed<Record<string, unknown>[]>(
   () => ngList.value as unknown as Record<string, unknown>[]
 )
 const inspectors = computed(() => fqcInspectorStats(ngList.value, keys.value))
-const highRisk = computed(() => fqcHighRiskRows(ngList.value))
 
-const clearRows = computed<Record<string, unknown>[]>(() => {
+const clearList = computed<FqcClearRow[]>(() => {
   const all = store.db.fqc as FqcClearRow[]
-  if (key.value === '全部') return all as unknown as Record<string, unknown>[]
-  return all.filter((r) => deptsHas(r, key.value)) as unknown as Record<string, unknown>[]
+  if (key.value === '全部') return all
+  return all.filter((r) => deptsHas(r, key.value))
 })
+const clearRows = computed(
+  () => clearList.value as unknown as Record<string, unknown>[]
+)
+const highRisk = computed(() => fqcHighRiskRows(clearList.value))
 
 const ngColumns: EditColumn[] = [
   { key: 'ws', label: '车间', width: 92, type: 'select', options: WORKSHOPS.map((w) => w.key) },

@@ -109,7 +109,6 @@ import {
   cmpCauseDistribution,
   cmpOwnerLoad,
   cmpSourceDistribution,
-  cmpSourceKey,
   cmpStats,
 } from '@/domain/ipqc/cmp'
 import { fp, shortDept } from '@/domain/ipqc/format'
@@ -169,11 +168,19 @@ const owners = computed(() =>
 )
 
 const YN = ['是', '否', '']
-const SOURCE_OPTS = Array.from(new Set(store.db.cmp.map((c) => cmpSourceKey(c.from))))
+const SOURCE_OPTS = Array.from(
+  new Set(store.db.cmp.map((c) => String(c.from ?? '')).filter(Boolean))
+)
+const CMP_DEPT_OPTS = Array.from(
+  new Set([
+    ...WORKSHOPS.map((w) => w.key),
+    ...store.db.cmp.map((c) => String(c.dept ?? '')).filter(Boolean),
+  ])
+)
 const columns: EditColumn[] = [
   { key: 'date', label: '日期', width: 100 },
   { key: 'from', label: '投诉来源', width: 106, type: 'select', options: SOURCE_OPTS },
-  { key: 'dept', label: '责任车间', width: 96, type: 'select', options: WORKSHOPS.map((w) => w.key) },
+  { key: 'dept', label: '责任车间', width: 96, type: 'select', options: CMP_DEPT_OPTS },
   { key: 'model', label: '机型', width: 90 },
   { key: 'part', label: '零件', width: 110 },
   { key: 'pn', label: '料号', width: 116 },

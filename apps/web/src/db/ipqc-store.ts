@@ -1,32 +1,30 @@
 import { createDefaultDb, STORAGE_KEY } from '@/domain/ipqc/seed'
 import type { IpqcDb } from '@/domain/ipqc/types'
-import { allFqcRows } from '@/domain/ipqc/fqc'
 
-function mergeFqcNg(old: Record<string, unknown>[] | undefined): Record<string, unknown>[] {
-  const all = allFqcRows()
-  if (!Array.isArray(old) || !old.length) return all
-  const idx: Record<string, number> = {}
-  all.forEach((r, i) => {
-    const row = r as { ws?: string; d?: string; pn?: string; lot?: string }
-    idx[`${row.ws}|${row.d}|${row.pn}|${row.lot}`] = i
-  })
-  old.forEach((r) => {
-    const row = r as { ws?: string; d?: string; pn?: string; lot?: string }
-    const k = `${row.ws || '注塑'}|${row.d}|${row.pn}|${row.lot}`
-    if (idx[k] != null) all[idx[k]] = { ...r, ws: row.ws || '注塑' }
-  })
-  return all
+const TABLE_KEYS = [
+  'fa',
+  'fqc',
+  'fqcNg',
+  'cmp',
+  'perf',
+  'mat',
+  'trn',
+  'exam',
+  'skill',
+] as const
+
+export function isIpqcDb(value: unknown): value is IpqcDb {
+  if (!value || typeof value !== 'object') return false
+  const d = value as Record<string, unknown>
+  return TABLE_KEYS.every((k) => Array.isArray(d[k]))
 }
 
 export function loadDb(): IpqcDb {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const d = JSON.parse(raw) as IpqcDb
-      if (d?.fa?.length) {
-        d.fqcNg = mergeFqcNg(d.fqcNg as Record<string, unknown>[])
-        return d
-      }
+      const d: unknown = JSON.parse(raw)
+      if (isIpqcDb(d)) return d
     }
   } catch {
     /* fall through */
@@ -48,9 +46,8 @@ export function exportDbJson(db: IpqcDb): string {
 }
 
 export function importDbJson(text: string): IpqcDb {
-  const d = JSON.parse(text) as IpqcDb
-  if (!d?.fa) throw new Error('invalid ipqc backup')
-  d.fqcNg = mergeFqcNg(d.fqcNg as Record<string, unknown>[])
+  const d: unknown = JSON.parse(text)
+  if (!isIpqcDb(d)) throw new Error('invalid ipqc backup')
   return d
 }
 

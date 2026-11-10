@@ -107,11 +107,11 @@
               :labels="ngRateLabels"
               :series="ngRateSeries"
               :height="220"
-              :max="40"
+              :max="ngRateMax"
             />
           </SectionCard>
           <SectionCard title="NG 反馈时长分布" subtitle="已填反馈分钟的 NG 批">
-            <IpqcHbar v-if="fbItems.length" :items="fbItems" />
+            <IpqcHbar v-if="fbTotal" :items="fbItems" />
             <p v-else class="muted small">本期无 NG 反馈记录。</p>
           </SectionCard>
         </div>
@@ -236,8 +236,12 @@ function stageCount(s: string): number {
 
 const focus = computed(() => faFocus(faAllList.value))
 
+const fbBuckets = computed(() => faFeedbackBuckets(faAllList.value))
+const fbTotal = computed(() =>
+  fbBuckets.value.reduce((a, b) => a + b.count, 0)
+)
 const fbItems = computed(() =>
-  faFeedbackBuckets(faAllList.value).map((b) => ({
+  fbBuckets.value.map((b) => ({
     label: b.label,
     value: b.count,
     text: `${b.count} 批`,
@@ -258,6 +262,13 @@ const ngRateSeries = computed(() => {
       }),
     },
   ]
+})
+const ngRateMax = computed(() => {
+  const vals = ngRateSeries.value.flatMap((s) =>
+    s.data.filter((v): v is number => v != null)
+  )
+  const top = vals.length ? Math.max(...vals) : 0
+  return Math.max(40, Math.ceil(top / 10) * 10)
 })
 
 const columns: EditColumn[] = [

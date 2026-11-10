@@ -66,7 +66,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SectionCard from '@/components/section-card/section-card.vue'
-import { downloadCsv } from '@/composables/use-table-export'
+import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
 import { CALIBER_GROUPS, DATA_SOURCES } from '@/domain/ipqc/sources'
 import { useIpqcStore } from '@/stores/ipqc'
@@ -229,12 +229,7 @@ function exportCsv(key: string): void {
 
 function onExport(): void {
   const blob = new Blob([store.exportJson()], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ipqc-backup-${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `ipqc-backup-${new Date().toISOString().slice(0, 10)}.json`)
   ElMessage.success('JSON 备份已导出')
 }
 

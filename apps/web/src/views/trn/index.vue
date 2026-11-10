@@ -59,8 +59,12 @@
           :columns="matColumns"
           :page-size="10"
           placeholder="搜索资料名 / 类型 / 版本 / 车间"
+          show-add
+          show-delete
           @change="persist"
-        @bulk-change="persist"
+          @bulk-change="persist"
+          @add="addMaterial"
+          @delete="deleteMaterial"
         />
         <p class="foot-note">「通用」资料在本车间可见；其他车间的专用资料不在本页显示。</p>
       </template>
@@ -74,8 +78,12 @@
           :columns="trnColumns"
           :page-size="10"
           placeholder="搜索日期 / 主题 / 讲师 / 方式"
+          show-add
+          show-delete
           @change="persist"
-        @bulk-change="persist"
+          @bulk-change="persist"
+          @add="addRecord"
+          @delete="deleteRecord"
         />
       </template>
 
@@ -88,8 +96,12 @@
           :columns="examColumns"
           :page-size="10"
           placeholder="搜索日期 / 姓名 / 科目"
+          show-add
+          show-delete
           @change="persist"
-        @bulk-change="persist"
+          @bulk-change="persist"
+          @add="addExam"
+          @delete="deleteExam"
         />
         <p class="foot-note">考核达标色参考平均分 ≥ 85；等级 A / B / C 可在下拉中修改。</p>
       </template>
@@ -270,6 +282,59 @@ function levelText(lv: number): string {
   return found ? `${lv} ${found[1]}` : '未评估'
 }
 function persist(): void {
+  store.persist()
+}
+function defaultDept(): string {
+  return key.value === '全部' ? '注塑' : key.value
+}
+function addMaterial(): void {
+  store.db.mat.unshift({
+    t: '',
+    dept: defaultDept(),
+    type: '检验标准',
+    ver: '',
+    date: new Date().toISOString().slice(0, 10),
+    pages: 0,
+  })
+  store.persist()
+}
+function deleteMaterial(row: Record<string, unknown>): void {
+  removeRow(store.db.mat, row)
+}
+function addRecord(): void {
+  store.db.trn.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    dept: defaultDept(),
+    topic: '',
+    trainer: '',
+    num: 0,
+    hours: 0,
+    way: '现场提问',
+    pass: 0,
+  })
+  store.persist()
+}
+function deleteRecord(row: Record<string, unknown>): void {
+  removeRow(store.db.trn, row)
+}
+function addExam(): void {
+  store.db.exam.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    who: '',
+    dept: defaultDept(),
+    subject: '',
+    score: 0,
+    level: 'B',
+  })
+  store.persist()
+}
+function deleteExam(row: Record<string, unknown>): void {
+  removeRow(store.db.exam, row)
+}
+function removeRow(list: Record<string, unknown>[], row: Record<string, unknown>): void {
+  const i = list.indexOf(row)
+  if (i < 0) return
+  list.splice(i, 1)
   store.persist()
 }
 function fmtPct(v: number | null | undefined): string {

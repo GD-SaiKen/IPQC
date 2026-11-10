@@ -24,6 +24,13 @@ describe('fa-rules', () => {
     expect(s.fbRate).toBe(50)
     expect(s.ivRate).toBe(50)
   })
+
+  it('有 NG 但未填反馈/介入时率为空而不是 0', () => {
+    const s = faStats([{ result: 'NG', fb: '', iv: '', status: '整改中' }])
+    expect(s.ng).toBe(1)
+    expect(s.fbRate).toBeNull()
+    expect(s.ivRate).toBeNull()
+  })
 })
 
 describe('fa-rules · 批次归并与时效分布', () => {
@@ -47,9 +54,19 @@ describe('fa-rules · 批次归并与时效分布', () => {
       { result: 'NG', fb: 5 },
       { result: 'NG', fb: 8 },
       { result: 'NG', fb: 16 },
+      { result: 'NG', fb: '' },
       { result: 'OK', fb: '' },
     ])
     expect(buckets.map((b) => b.count)).toEqual([1, 1, 1, 0, 1])
+  })
+
+  it('未填写反馈分钟的 NG 不计入最快桶', () => {
+    const buckets = faFeedbackBuckets([
+      { result: 'NG', fb: '' },
+      { result: 'NG' },
+      { result: 'NG', fb: 3 },
+    ])
+    expect(buckets.map((b) => b.count)).toEqual([1, 0, 0, 0, 0])
   })
 
   it('NG 确认角色随阶段切换', () => {

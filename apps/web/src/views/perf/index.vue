@@ -118,8 +118,12 @@
         :columns="columns"
         :page-size="15"
         placeholder="搜索日期 / 姓名 / 维度 / 事项"
+        show-add
+        show-delete
         @change="persist"
         @bulk-change="persist"
+        @add="addRow"
+        @delete="deleteRow"
       />
     </SectionCard>
 
@@ -199,6 +203,24 @@ const columns: EditColumn[] = [
 ]
 
 function persist(): void {
+  store.persist()
+}
+function addRow(): void {
+  store.db.perf.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    dept: isAll.value ? '注塑' : key.value,
+    who: '',
+    attr: PERF_ATTRS[0],
+    item: '',
+    score: 0,
+  })
+  store.persist()
+}
+function deleteRow(row: Record<string, unknown>): void {
+  const list = store.db.perf
+  const i = list.indexOf(row as unknown as (typeof list)[number])
+  if (i < 0) return
+  list.splice(i, 1)
   store.persist()
 }
 function fmtPct(v: number | null | undefined): string {

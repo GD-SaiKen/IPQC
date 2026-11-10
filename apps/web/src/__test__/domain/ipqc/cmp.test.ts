@@ -65,6 +65,20 @@ describe('cmp', () => {
     expect(s.repeat).toBe(1)
   })
 
+  it('无投诉时结案率为空', () => {
+    const s = cmpStats([])
+    expect(s.closeRate).toBeNull()
+    expect(s.replyDone).toBeNull()
+    expect(s.dispDone).toBeNull()
+  })
+
+  it('未填按时标记时按时率为空而不是 0', () => {
+    const s = cmpStats([{ date: '2026-03-01', from: 'BC', dept: '注塑' }])
+    expect(s.replyRate).toBeNull()
+    expect(s.dispRate).toBeNull()
+    expect(s.closeOnTime).toBeNull()
+  })
+
   it('未填实际结案日视为未结案', () => {
     expect(isClosed(rows[0])).toBe(true)
     expect(isClosed(rows[1])).toBe(false)

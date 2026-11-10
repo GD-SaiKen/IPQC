@@ -9,7 +9,7 @@ export const DATA_SOURCES: DataSourceRow[] = [
   {
     file: '100394-003首巡检报告.xls',
     use: 'S/X 合用一份表：S＝首件、X＝巡检；逐尺寸实测（146 行）按「日期 + 检验员」归并为首件批次',
-    count: '88 批',
+    count: '87 批',
   },
   {
     file: '注塑 / 压铸 / 五金车间首巡检报告',
@@ -44,7 +44,7 @@ export const DATA_SOURCES: DataSourceRow[] = [
   {
     file: '注塑车间关键点管控.xlsx',
     use: '点检项目、分值、判定标准',
-    count: '22 项',
+    count: '23 项',
   },
   {
     file: 'PQC员工2026年绩效.xlsx',

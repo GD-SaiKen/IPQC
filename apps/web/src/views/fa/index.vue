@@ -71,14 +71,14 @@
             <div class="value">{{ fmtPct(faAll.total ? 100 - faAll.ngRate : null) }}</div>
             <div class="muted small">100% − NG 批 / 总批</div>
           </div>
-          <div class="kpi-card" :class="faAll.fbRate < 90 ? 'dan' : ''">
+          <div class="kpi-card" :class="faAll.fbRate != null && faAll.fbRate < 90 ? 'dan' : ''">
             <div class="label">≤5 分钟反馈率</div>
-            <div class="value">{{ faAll.ng ? fmtPct(faAll.fbRate) : '—' }}</div>
+            <div class="value">{{ fmtPct(faAll.fbRate) }}</div>
             <div class="muted small">已填反馈均 {{ faAll.avgFb ? `${fp(faAll.avgFb, 1)} 分钟` : '—' }}</div>
           </div>
-          <div class="kpi-card" :class="faAll.ivRate < 85 ? 'dan' : ''">
+          <div class="kpi-card" :class="faAll.ivRate != null && faAll.ivRate < 85 ? 'dan' : ''">
             <div class="label">≤15 分钟介入率</div>
-            <div class="value">{{ faAll.ng ? fmtPct(faAll.ivRate) : '—' }}</div>
+            <div class="value">{{ fmtPct(faAll.ivRate) }}</div>
             <div class="muted small">已填介入均 {{ faAll.avgIv ? `${fp(faAll.avgIv, 1)} 分钟` : '—' }}</div>
           </div>
           <div class="kpi-card">
@@ -174,8 +174,12 @@
             :columns="columns"
             :page-size="15"
             placeholder="搜索日期 / 料号 / 品名 / 检验项 / 检验员"
+            show-add
+            show-delete
             @change="persist"
-        @bulk-change="persist"
+            @bulk-change="persist"
+            @add="addRow"
+            @delete="deleteRow"
           />
         </SectionCard>
       </div>
@@ -303,6 +307,36 @@ const columns: EditColumn[] = [
 ]
 
 function persist(): void {
+  store.persist()
+}
+
+function addRow(): void {
+  store.db.fa.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    stage: stage.value === '全部' ? '量产' : stage.value,
+    dept: isAll.value ? '注塑' : key.value,
+    pn: '',
+    part: '',
+    item: '',
+    spec: '',
+    meas: '',
+    result: 'OK',
+    who: '',
+    fb: '',
+    iv: '',
+    status: '已放行',
+    action: '',
+    eng: '',
+    src: '实测',
+  })
+  store.persist()
+}
+
+function deleteRow(row: Record<string, unknown>): void {
+  const list = store.db.fa
+  const i = list.indexOf(row as unknown as (typeof list)[number])
+  if (i < 0) return
+  list.splice(i, 1)
   store.persist()
 }
 

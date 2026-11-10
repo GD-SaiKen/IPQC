@@ -36,12 +36,12 @@ export function isClosed(c: ComplaintRecord): boolean {
 
 export interface CmpStats {
   total: number
-  replyRate: number
-  replyDone: number
-  dispRate: number
-  dispDone: number
-  closeRate: number
-  closeOnTime: number
+  replyRate: number | null
+  replyDone: number | null
+  dispRate: number | null
+  dispDone: number | null
+  closeRate: number | null
+  closeOnTime: number | null
   closed: number
   repeat: number
   overdue: number
@@ -54,12 +54,18 @@ export function cmpStats(list: ComplaintRecord[]): CmpStats {
   const closed = list.filter(isClosed)
   return {
     total: list.length,
-    replyRate: pct(reply.filter((c) => c.ontimeReply === '是').length, reply.length),
-    replyDone: pct(list.filter((c) => c.actReply).length, list.length),
-    dispRate: pct(disp.filter((c) => c.ontimeDisp === '是').length, disp.length),
-    dispDone: pct(list.filter((c) => c.actDisp).length, list.length),
-    closeRate: pct(closed.length, list.length),
-    closeOnTime: pct(close.filter((c) => c.ontimeClose === '是').length, close.length),
+    replyRate: reply.length
+      ? pct(reply.filter((c) => c.ontimeReply === '是').length, reply.length)
+      : null,
+    replyDone: list.length ? pct(list.filter((c) => c.actReply).length, list.length) : null,
+    dispRate: disp.length
+      ? pct(disp.filter((c) => c.ontimeDisp === '是').length, disp.length)
+      : null,
+    dispDone: list.length ? pct(list.filter((c) => c.actDisp).length, list.length) : null,
+    closeRate: list.length ? pct(closed.length, list.length) : null,
+    closeOnTime: close.length
+      ? pct(close.filter((c) => c.ontimeClose === '是').length, close.length)
+      : null,
     closed: closed.length,
     repeat: list.filter((c) => c.repeat === '是').length,
     overdue: list.filter((c) => !isClosed(c)).length,

@@ -123,8 +123,12 @@
         :columns="ngColumns"
         :page-size="15"
         placeholder="搜索日期 / 料号 / 批次 / 不良 / 检验员"
+        show-add
+        show-delete
         @change="persist"
         @bulk-change="persist"
+        @add="addNgRow"
+        @delete="deleteNgRow"
       />
     </SectionCard>
 
@@ -137,8 +141,12 @@
         :columns="clearColumns"
         :page-size="12"
         placeholder="搜索日期 / 料号 / 品名 / 不良 / 涉及车间"
+        show-add
+        show-delete
         @change="persist"
         @bulk-change="persist"
+        @add="addClearRow"
+        @delete="deleteClearRow"
       />
     </SectionCard>
 
@@ -261,13 +269,57 @@ const clearColumns: EditColumn[] = [
     key: 'rate',
     label: '不良率',
     width: 84,
-    format: (r) => `${fp(fqcRateRow(r), 1)}%`,
+    format: (r) => fmtPct(fqcRateRow(r)),
   },
   { key: 'note', label: '备注', width: 200 },
   { key: 'action', label: '对策', width: 180 },
 ]
 
 function persist(): void {
+  store.persist()
+}
+function addNgRow(): void {
+  store.db.fqcNg.unshift({
+    ws: key.value === '全部' ? '注塑' : key.value,
+    d: new Date().toISOString().slice(0, 10),
+    pn: '',
+    lot: '',
+    samp: 0,
+    bad: 0,
+    cat: '',
+    defs: '',
+    who: '',
+    act: '',
+    re: '',
+    rd: '',
+  })
+  store.persist()
+}
+function deleteNgRow(row: Record<string, unknown>): void {
+  const i = store.db.fqcNg.indexOf(row)
+  if (i < 0) return
+  store.db.fqcNg.splice(i, 1)
+  store.persist()
+}
+function addClearRow(): void {
+  store.db.fqc.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    pn: '',
+    part: '',
+    issue: '',
+    checker: '',
+    depts: key.value === '全部' ? '' : key.value,
+    stock: 0,
+    ng: 0,
+    note: '',
+    action: '',
+  })
+  store.persist()
+}
+function deleteClearRow(row: Record<string, unknown>): void {
+  const i = store.db.fqc.indexOf(row)
+  if (i < 0) return
+  store.db.fqc.splice(i, 1)
   store.persist()
 }
 function fmtPct(v: number | null | undefined, d = 1): string {

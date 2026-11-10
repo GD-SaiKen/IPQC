@@ -13,24 +13,24 @@
         <div class="value">{{ stats.total || '—' }}</div>
         <div class="muted small">未结 {{ stats.overdue }} 批</div>
       </div>
-      <div class="kpi-card" :class="stats.replyRate < 90 ? 'warn' : ''">
+      <div class="kpi-card" :class="stats.replyRate != null && stats.replyRate < 90 ? 'warn' : ''">
         <div class="label">按时回复率</div>
-        <div class="value">{{ stats.replyDone ? fmtPct(stats.replyRate) : '—' }}</div>
+        <div class="value">{{ fmtPct(stats.replyRate) }}</div>
         <div class="muted small">已回复 {{ fmtPct(stats.replyDone) }}</div>
       </div>
-      <div class="kpi-card" :class="stats.dispRate < 90 ? 'warn' : ''">
+      <div class="kpi-card" :class="stats.dispRate != null && stats.dispRate < 90 ? 'warn' : ''">
         <div class="label">按时处理率</div>
-        <div class="value">{{ stats.dispDone ? fmtPct(stats.dispRate) : '—' }}</div>
+        <div class="value">{{ fmtPct(stats.dispRate) }}</div>
         <div class="muted small">已处理 {{ fmtPct(stats.dispDone) }}</div>
       </div>
-      <div class="kpi-card" :class="stats.closeRate < 95 ? 'warn' : ''">
+      <div class="kpi-card" :class="stats.closeRate != null && stats.closeRate < 95 ? 'warn' : ''">
         <div class="label">结案率</div>
         <div class="value">{{ fmtPct(stats.closeRate) }}</div>
         <div class="muted small">已结 {{ stats.closed }} 批</div>
       </div>
-      <div class="kpi-card" :class="stats.closeOnTime < 90 ? 'warn' : ''">
+      <div class="kpi-card" :class="stats.closeOnTime != null && stats.closeOnTime < 90 ? 'warn' : ''">
         <div class="label">按时结案率</div>
-        <div class="value">{{ stats.closed ? fmtPct(stats.closeOnTime) : '—' }}</div>
+        <div class="value">{{ fmtPct(stats.closeOnTime) }}</div>
         <div class="muted small">按时分母＝已填按时标记</div>
       </div>
       <div class="kpi-card" :class="stats.repeat ? 'dan' : ''">
@@ -86,8 +86,12 @@
         :columns="columns"
         :page-size="12"
         placeholder="搜索日期 / 来源 / 零件 / 料号 / 问题 / 责任人"
+        show-add
+        show-delete
         @change="persist"
         @bulk-change="persist"
+        @add="addRow"
+        @delete="deleteRow"
       />
       <p class="foot-note">
         按时「是 / 否」未填视为未回复，不计入按时分母。重复投诉（repeat＝是）单独提示；
@@ -202,6 +206,39 @@ const columns: EditColumn[] = [
 ]
 
 function persist(): void {
+  store.persist()
+}
+function addRow(): void {
+  store.db.cmp.unshift({
+    date: new Date().toISOString().slice(0, 10),
+    from: '',
+    dept: key.value === '全部' ? '注塑' : key.value,
+    model: '',
+    part: '',
+    pn: '',
+    issue: '',
+    cause: '',
+    temp: '',
+    perm: '',
+    owner: '',
+    planReply: '',
+    actReply: '',
+    ontimeReply: '',
+    planDisp: '',
+    actDisp: '',
+    ontimeDisp: '',
+    planClose: '',
+    actClose: '',
+    ontimeClose: '',
+    repeat: '否',
+  })
+  store.persist()
+}
+function deleteRow(row: Record<string, unknown>): void {
+  const list = store.db.cmp
+  const i = list.indexOf(row as unknown as (typeof list)[number])
+  if (i < 0) return
+  list.splice(i, 1)
   store.persist()
 }
 function fmtPct(v: number | null | undefined, d = 1): string {

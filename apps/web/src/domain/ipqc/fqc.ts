@@ -108,9 +108,9 @@ export function aggFqc(keys: string[]) {
   return { meta, month, pareto, parts, whos, act: {}, rows: [] }
 }
 
-export function fqcRateRow(r: { stock?: unknown; ng?: unknown }): number {
+export function fqcRateRow(r: { stock?: unknown; ng?: unknown }): number | null {
   const stock = num(r.stock)
-  return stock > 0 ? pct(num(r.ng), stock) : 0
+  return stock > 0 ? pct(num(r.ng), stock) : null
 }
 
 export function fqcNgInMonth(
@@ -245,7 +245,10 @@ export function fqcHighRiskRows<T extends { stock?: unknown; ng?: unknown }>(
   rows: T[],
   threshold = 20
 ): T[] {
-  return rows.filter((r) => fqcRateRow(r) >= threshold)
+  return rows.filter((r) => {
+    const rate = fqcRateRow(r)
+    return rate != null && rate >= threshold
+  })
 }
 
 export interface FqcPartStat {

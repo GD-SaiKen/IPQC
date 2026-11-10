@@ -13,17 +13,17 @@
         <div class="value">{{ fmtPct(fa.faOK) }}</div>
         <div class="muted small">{{ fa.total }} 批 · NG {{ fa.ng }} 批</div>
       </div>
-      <div class="kpi-card" :class="fa.fbRate < 90 ? 'dan' : ''">
+      <div class="kpi-card" :class="fa.fbRate != null && fa.fbRate < 90 ? 'dan' : ''">
         <div class="label">NG 5 分钟反馈率</div>
-        <div class="value">{{ fa.ng ? fmtPct(fa.fbRate) : '—' }}</div>
+        <div class="value">{{ fmtPct(fa.fbRate) }}</div>
         <div class="muted small">已填反馈 · 均 {{ fa.avgFb ? `${fp(fa.avgFb, 1)} 分钟` : '—' }}</div>
       </div>
-      <div class="kpi-card" :class="fa.ivRate < 85 ? 'dan' : ''">
+      <div class="kpi-card" :class="fa.ivRate != null && fa.ivRate < 85 ? 'dan' : ''">
         <div class="label">15 分钟介入率</div>
-        <div class="value">{{ fa.ng ? fmtPct(fa.ivRate) : '—' }}</div>
+        <div class="value">{{ fmtPct(fa.ivRate) }}</div>
         <div class="muted small">均 {{ fa.avgIv ? `${fp(fa.avgIv, 1)} 分钟` : '—' }}</div>
       </div>
-      <div class="kpi-card" :class="cmp.closeRate < 95 ? 'warn' : ''">
+      <div class="kpi-card" :class="cmp.closeRate != null && cmp.closeRate < 95 ? 'warn' : ''">
         <div class="label">投诉结案率</div>
         <div class="value">{{ fmtPct(cmp.closeRate) }}</div>
         <div class="muted small">{{ cmp.total }} 批 · 未结 {{ cmp.overdue }} 批</div>
@@ -199,7 +199,7 @@ const alerts = computed<AlertRow[]>(() => {
   }
   const high = fqcHighRiskRows(clearRows.value)
   if (high.length) {
-    const top = high.slice(0, 2).map((r) => `${r.pn || '—'} ${fp(fqcRateRow(r), 1)}%`)
+    const top = high.slice(0, 2).map((r) => `${r.pn || '—'} ${fmtPct(fqcRateRow(r))}`)
     out.push({
       lv: 'dan',
       t: '终检单条高不良（≥20%）',

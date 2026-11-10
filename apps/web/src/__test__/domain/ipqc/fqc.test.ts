@@ -96,8 +96,8 @@ describe('fqc', () => {
     expect(other).toBe(0)
   })
 
-  it('清查记录不良率分母为 0 时返回 0', () => {
-    expect(fqcRateRow({ stock: 0, ng: 3 })).toBe(0)
+  it('清查记录不良率分母为 0 时返回 null', () => {
+    expect(fqcRateRow({ stock: 0, ng: 3 })).toBeNull()
     expect(fqcRateRow({ stock: 100, ng: 5 })).toBe(5)
   })
 

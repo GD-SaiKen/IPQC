@@ -30,8 +30,8 @@ export interface FaStats {
   total: number
   ng: number
   ngRate: number
-  fbRate: number
-  ivRate: number
+  fbRate: number | null
+  ivRate: number | null
   avgFb: number
   avgIv: number
   open: number
@@ -47,8 +47,8 @@ export function faStats(list: { result: string; fb?: unknown; iv?: unknown; stat
     total: list.length,
     ng: ng.length,
     ngRate: pct(ng.length, list.length),
-    fbRate: pct(okfb, fb.length),
-    ivRate: pct(okiv, iv.length),
+    fbRate: fb.length ? pct(okfb, fb.length) : null,
+    ivRate: iv.length ? pct(okiv, iv.length) : null,
     avgFb: fb.length ? sum(fb, (r) => num(r.fb)) / fb.length : 0,
     avgIv: iv.length ? sum(iv, (r) => num(r.iv)) / iv.length : 0,
     open: ng.filter((r) => r.status !== '已关闭').length,
@@ -161,7 +161,7 @@ export function faFeedbackBuckets(
     { label: '>15 分钟', count: 0, color: '#dc2626' },
   ]
   list
-    .filter((r) => String(r.result).toUpperCase() === 'NG')
+    .filter((r) => String(r.result).toUpperCase() === 'NG' && num(r.fb) > 0)
     .forEach((r) => {
       const f = num(r.fb)
       const i = f <= 3 ? 0 : f <= 5 ? 1 : f <= 10 ? 2 : f <= 15 ? 3 : 4

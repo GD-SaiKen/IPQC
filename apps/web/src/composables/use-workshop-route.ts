@@ -1,7 +1,15 @@
 import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useIpqcStore } from '@/stores/ipqc'
+import { WORKSHOPS } from '@/domain/ipqc/workshops'
 import type { WorkshopFilter } from '@/domain/ipqc/types'
+
+const WS_KEYS = new Set<string>(['全部', ...WORKSHOPS.map((w) => w.key)])
+
+function safeWorkshop(raw: unknown): WorkshopFilter {
+  const key = String(raw ?? '全部')
+  return (WS_KEYS.has(key) ? key : '全部') as WorkshopFilter
+}
 
 export function useWorkshopRoute() {
   const route = useRoute()
@@ -9,8 +17,7 @@ export function useWorkshopRoute() {
   const store = useIpqcStore()
 
   const syncFromRoute = () => {
-    const ws = (route.query.ws as string) || '全部'
-    store.setWorkshop(ws as WorkshopFilter)
+    store.setWorkshop(safeWorkshop(route.query.ws))
   }
   syncFromRoute()
   watch(

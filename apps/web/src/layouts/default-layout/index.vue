@@ -98,6 +98,15 @@
           <el-button text @click="boardMode = !boardMode">
             {{ boardMode ? '显示侧栏' : '看板模式' }}
           </el-button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="打印 / 导出 PDF"
+            aria-label="打印"
+            @click="onPrint"
+          >
+            <el-icon :size="18"><Printer /></el-icon>
+          </button>
         </div>
       </header>
 
@@ -111,7 +120,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Expand, Fold } from '@element-plus/icons-vue'
+import { ArrowLeft, Expand, Fold, Printer } from '@element-plus/icons-vue'
 
 import { buildIpqcMenuGroups, isMenuItemActive } from './menu'
 import type { NavItem } from './menu'
@@ -200,6 +209,10 @@ function goBack(): void {
 function onChip(w: WorkshopFilter): void {
   if (w === '全部') backToBoard()
   else enterWorkshop(w)
+}
+
+function onPrint(): void {
+  window.print()
 }
 
 watch(
@@ -582,6 +595,28 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #7a8494;
   white-space: nowrap;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #566070;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: #f8fafc;
+    color: #1f2733;
+    border-color: #cfd8e6;
+  }
 }
 
 .view {

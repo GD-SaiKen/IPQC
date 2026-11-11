@@ -2,7 +2,8 @@ import { CHK_APPLY, chkMonthScore, CHK_TARGET } from './check'
 import { faStats } from './fa-rules'
 import { aggFqc, fqcKeysOf, fqcNgInMonth } from './fqc'
 import { inMonth, pct, shortDept, sum } from './format'
-import type { CheckScores, IpqcDb, PerfRecord, WorkshopKey } from './types'
+import { computePerf } from './perf'
+import type { CheckScores, IpqcDb, WorkshopKey } from './types'
 import { WORKSHOPS } from './workshops'
 
 export interface WsKpi {
@@ -23,54 +24,19 @@ export interface WsKpi {
   fqcRate: number | null
 }
 
-function computePerf(list: PerfRecord[]) {
-  const m: Record<
-    string,
-    {
-      name: string
-      dept: string
-      cnt: number
-      months: Record<string, number>
-      total: number
-      grade: string
-    }
-  > = {}
-  list.forEach((p) => {
-    const names = String(p.who || '')
-      .split(/[/、]/)
-      .map((s) => s.trim())
-      .filter((s) => /^[\u4e00-\u9fa5]{2,3}$/.test(s))
-    if (!names.length) return
-    const share = Number(p.score) / names.length
-    let mon = String(p.date || '').slice(0, 7)
-    if (!/^\d{4}-\d{2}$/.test(mon)) mon = '历史'
-    names.forEach((n) => {
-      const s = m[n] || (m[n] = { name: n, dept: shortDept(p.dept) || '注塑', cnt: 0, months: {}, total: 0, grade: 'D' })
-      s.cnt++
-      s.months[mon] = (s.months[mon] || 0) + share
-    })
-  })
-  return Object.values(m).map((s) => {
-    const ms = Object.values(s.months)
-    const n = ms.length || 1
-    const net = ms.reduce((a, b) => a + b, 0) / n
-    s.total = +(100 + net).toFixed(1)
-    s.grade = s.total >= 105 ? 'A' : s.total >= 100 ? 'B' : s.total >= 95 ? 'C' : 'D'
-    return s
-  })
-}
-
 export function wsKpi(
   db: IpqcDb,
   checkScores: CheckScores,
   key: WorkshopKey,
   m: number
 ): WsKpi {
-  const same = (r: { dept?: string }) => shortDept(r.dept) === key
+  const same = (r: { dept?: unknown }) => shortDept(String(r.dept ?? '')) === key
   const fa = db.fa.filter((r) => same(r) && inMonth(r.date, m))
   const cm = db.cmp.filter((r) => same(r) && inMonth(r.date, m))
   const pf = db.perf.filter((r) => same(r) && inMonth(r.date, m))
-  const tr = db.trn.filter((r) => same(r) && inMonth(r.date, m))
+  const tr = db.trn.filter(
+    (r) => (same(r) || r.dept === '通用') && inMonth(r.date, m)
+  )
   const ngFa = fa.filter((r) => String(r.result).toUpperCase() === 'NG').length
   const closed = cm.filter((c) => c.actClose).length
   const chk = chkMonthScore(checkScores, key, m)
@@ -204,6 +170,15 @@ export function boardAlerts(
       ws: o.w.key,
     })
   )
+  if (fqBad.length > 2) {
+    const rest = fqBad.slice(2)
+    out.push({
+      pri: 2,
+      lv: 'dan',
+      t: '其余车间终检批次不良率超 3%',
+      d: `${rest.length} 个车间 · ${rest.map((o) => `${o.w.name} ${o.k.fqcRate?.toFixed(2)}%`).join('、')}`,
+    })
+  }
 
   const openList = WORKSHOPS.map((w) => ({ w, k: wsKpi(db, checkScores, w.key, m) }))
     .filter((o) => o.k.cmpOpen > 0)
@@ -217,6 +192,15 @@ export function boardAlerts(
       ws: o.w.key,
     })
   )
+  if (openList.length > 3) {
+    const rest = openList.slice(3)
+    out.push({
+      pri: 3,
+      lv: 'dan',
+      t: '其余车间投诉未结案',
+      d: `${rest.length} 个车间 · 共 ${sum(rest, (o) => o.k.cmpOpen)} 批未结`,
+    })
+  }
 
   return out.sort((x, y) => x.pri - y.pri).slice(0, 9)
 }

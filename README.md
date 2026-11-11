@@ -10,11 +10,14 @@ IPQC 已迁移到 `GD-SaiKen` 组织，并使用组织级中心仓库 [GD-SaiKen
 pnpm install
 pnpm extract-seed   # 从 docs/原型 HTML 抽取 real/fqc 等种子 JSON
 pnpm dev            # http://localhost:5173
+pnpm lint           # vue-tsc 类型检查
 pnpm test
 pnpm build
 ```
 
 工程路径：`apps/web`（Vue 3 + Element Plus + Pinia，数据存 localStorage）。
+
+功能模块：总看板（KPI 对比 / 热力矩阵 / 走势）、车间总览、首件巡检（标准索引 + NG 5 步闭环）、终检 FQC、零件投诉闭环、关键点检、培训与技能矩阵、工作绩效、数据与口径设置。页面支持内联编辑、搜索分页、CSV / JSON 导出、单表撤销与打印版式；口径与验收见产品 SDD。
 
 ## 流程
 

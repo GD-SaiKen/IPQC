@@ -74,6 +74,69 @@ export interface IpqcDb {
   skill: Record<string, unknown>[]
 }
 
+export interface FqcNgRow {
+  ws?: string
+  d?: string
+  pn?: string
+  lot?: number | string
+  samp?: number | string
+  bad?: number | string
+  cat?: string
+  defs?: string
+  who?: string
+  act?: string
+  rd?: string
+  re?: string
+}
+
+export interface FqcClearRow {
+  date?: string
+  pn?: string
+  part?: string
+  issue?: string
+  checker?: string
+  depts?: string
+  stock?: number | string
+  ng?: number | string
+  note?: string
+  action?: string
+}
+
+export interface TrainingMaterial {
+  t?: string
+  dept?: string
+  type?: string
+  ver?: string
+  date?: string
+  pages?: number | string
+}
+
+export interface TrainingRecord {
+  date?: string
+  dept?: string
+  topic?: string
+  trainer?: string
+  num?: number | string
+  hours?: number | string
+  way?: string
+  pass?: number | string
+}
+
+export interface TrainingExam {
+  date?: string
+  who?: string
+  dept?: string
+  subject?: string
+  score?: number | string
+  level?: string
+}
+
+export interface SkillRow {
+  who?: string
+  dept?: string
+  lv?: number[]
+}
+
 export interface CheckScores {
   [workshop: string]: Record<number, number>
 }

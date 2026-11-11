@@ -15,17 +15,17 @@ export function sum<T>(arr: T[], f?: (o: T) => number): number {
   return arr.reduce((s, o) => s + (f ? f(o) : 0), 0)
 }
 
-export function monthOf(d: string | undefined): number {
+export function monthOf(d: unknown): number {
   const m = String(d || '').match(/^(\d{4})-(\d{2})/)
   return m ? +m[2] : 0
 }
 
-export function shortDept(d: string | undefined): string {
+export function shortDept(d: unknown): string {
   const s = String(d || '').trim().replace(/车间$/, '')
   if (s === '毛边' || s === '注塑毛边') return '注塑毛边'
   return s
 }
 
-export function inMonth(d: string | undefined, m: number): boolean {
+export function inMonth(d: unknown, m: number): boolean {
   return m ? monthOf(d) === m : true
 }

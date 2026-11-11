@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { WORKSHOPS } from '@/domain/ipqc/workshops'
+
+const WS_KEYS = new Set<string>(['全部', ...WORKSHOPS.map((w) => w.key)])
 
 const routes: RouteRecordRaw[] = [
   {
@@ -109,9 +112,9 @@ export const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const ws = (to.query.ws as string) || '全部'
+  const ws = String(to.query.ws ?? '全部')
   const mode = to.meta.workshopMode as string | undefined
-  if (mode === 'workshop' && (!ws || ws === '全部')) {
+  if (mode === 'workshop' && (ws === '全部' || !WS_KEYS.has(ws))) {
     return { path: '/board', query: { ws: '全部' } }
   }
   if (mode === 'all' && ws !== '全部' && to.name !== 'data') {

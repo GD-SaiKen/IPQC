@@ -90,9 +90,69 @@ body {
   font-size: 12px;
 }
 
+@page {
+  size: A3 landscape;
+  margin: 10mm;
+}
+
 @media print {
+  html,
+  body,
+  #app {
+    height: auto;
+    background: #fff;
+  }
+
   .sidebar,
-  .topbar {
+  .topbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-layout,
+  .main,
+  .view,
+  .page-scroll {
+    display: block;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .view {
+    padding: 0;
+  }
+
+  .page-scroll {
+    padding: 0;
+  }
+
+  .section-card,
+  .kpi-card,
+  .banner {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .section-card {
+    border-color: #cbd5e1;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .table-wrap,
+  .et-scroll,
+  .mx-wrap,
+  .skill-wrap {
+    overflow: visible !important;
+  }
+
+  .et-toolbar,
+  .et-pager,
+  .metric-tabs,
+  .zone-tabs,
+  .stage-tabs {
     display: none !important;
   }
 }

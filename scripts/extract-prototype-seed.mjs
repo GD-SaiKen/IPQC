@@ -43,6 +43,10 @@ const writes = [
   ['skill-matrix.json', () => sliceBetween('const SKILL_MATRIX = ', '\nconst PERF_RULES = ')],
   ['roster.json', () => sliceBetween('const ROSTER = ', '\nconst ITEM_POOL = ')],
   ['item-pool.json', () => sliceBetween('const ITEM_POOL = ', '\nconst CHECK_ITEMS = ')],
+  ['check-items.json', () => sliceBetween('const CHECK_ITEMS = ', '\n/* ============ 培训与技能')],
+  ['skills.json', () => sliceBetween('const SKILLS = ', '\nconst SKILL_MATRIX = ')],
+  ['perf-rules.json', () => sliceBetween('const PERF_RULES = ', '\n/* ============ 首件记录')],
+  ['std-index.json', () => sliceBetween('const STD_INDEX = ', '\n</script>')],
   ['actions.json', () => sliceBetween('const ACTIONS = ', '\nconst COMPLAINT_CAUSE_TAGS = ')],
 ]
 

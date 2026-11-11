@@ -7,7 +7,7 @@ import trainingRecordsJson from '@/fixtures/raw/training-records.json'
 import { FA_STAGES } from './fa-rules'
 import { allFqcRows } from './fqc'
 import type { CheckScores, FaRecord, IpqcDb } from './types'
-import { WS_MAP, WORKSHOPS } from './workshops'
+import { WS_MAP } from './workshops'
 
 const REAL = realJson as {
   complaints: Record<string, unknown>[]
@@ -145,8 +145,8 @@ export function createDefaultDb(): IpqcDb {
     fa: buildFa().sort((a, b) => String(b.date).localeCompare(String(a.date))),
     fqc: (REAL.finalInsp || []).map((r) => ({ ...r })),
     fqcNg: allFqcRows(),
-    cmp: (REAL.complaints || []).map((r) => ({ ...r })) as IpqcDb['cmp'],
-    perf: (REAL.perfRecords || []).map((r) => ({ ...r })) as IpqcDb['perf'],
+    cmp: (REAL.complaints || []).map((r) => ({ ...r })) as unknown as IpqcDb['cmp'],
+    perf: (REAL.perfRecords || []).map((r) => ({ ...r })) as unknown as IpqcDb['perf'],
     mat: trainingMaterialsJson.map((o) => ({ ...o })),
     trn: trainingRecordsJson.map((o) => ({ ...o })),
     exam: trainingExamsJson.map((o) => ({ ...o })),

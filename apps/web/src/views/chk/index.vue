@@ -195,7 +195,7 @@ const zoneTrend = computed(() => [
   {
     name: wsName(activeZone.value),
     color: WS_MAP[activeZone.value]?.color || '#2563eb',
-    data: chkTrend(store.checkScores, activeZone.value).map((v) => v ?? 0),
+    data: chkTrend(store.checkScores, activeZone.value),
     area: true,
   },
 ])

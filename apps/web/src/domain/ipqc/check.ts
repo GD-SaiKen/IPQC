@@ -85,7 +85,9 @@ export function chkRank(scores: CheckScores, keys: string[]): ChkRankRow[] {
         trend: Object.keys(raw)
           .map(Number)
           .sort((a, b) => a - b)
-          .map((m) => +(Number(raw[m]) / (max || 100) * 100).toFixed(1)),
+          .map((m) =>
+            +((Number(raw[m]) / (chkMax(scores, key, m) || 100)) * 100).toFixed(1)
+          ),
       }
     })
     .sort((a, b) => b.latest - a.latest)

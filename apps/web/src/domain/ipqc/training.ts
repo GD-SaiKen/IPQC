@@ -33,11 +33,11 @@ export function visibleMaterial(
 }
 
 export function visibleRecord(r: TrainingRecord, ws: WorkshopFilter): boolean {
-  return ws === '全部' || shortDept(r.dept) === ws
+  return ws === '全部' || r.dept === '通用' || shortDept(r.dept) === ws
 }
 
 export function visibleExam(e: TrainingExam, ws: WorkshopFilter): boolean {
-  return ws === '全部' || shortDept(e.dept) === ws
+  return ws === '全部' || e.dept === '通用' || shortDept(e.dept) === ws
 }
 
 export function visibleSkill(s: SkillRow, ws: WorkshopFilter): boolean {

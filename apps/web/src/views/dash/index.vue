@@ -4,7 +4,7 @@
       <i class="wsdot" :style="{ background: ws.color }" />
       <b>{{ ws.name }} · 子工作台</b>
       <span class="muted">负责人 {{ ws.owner }} · CE {{ ws.ce }}</span>
-      <span class="muted small">数据周期 2026 年 1–10 月</span>
+      <span class="muted small">数据周期 2026 年 {{ store.boardMonth ? mLabel(store.boardMonth) : '1–10 月累计' }}</span>
     </div>
 
     <div class="kpi-grid">
@@ -103,13 +103,12 @@ import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcHbar from '@/components/ipqc-chart/ipqc-hbar.vue'
 import { useWorkshopRoute } from '@/composables/use-workshop-route'
 import { chkLatest, chkScaleText } from '@/domain/ipqc/check'
-import { cmpStats } from '@/domain/ipqc/cmp'
 import { faStats, FA_STEPS } from '@/domain/ipqc/fa-rules'
 import { fqcCat, fqcHighRiskRows, fqcKeysOf, fqcRateRow, deptsHas } from '@/domain/ipqc/fqc'
-import { fp, shortDept } from '@/domain/ipqc/format'
+import { fp, inMonth, shortDept } from '@/domain/ipqc/format'
 import { allKpi, wsKpi } from '@/domain/ipqc/kpi'
 import { computePerf } from '@/domain/ipqc/perf'
-import { WS_MAP } from '@/domain/ipqc/workshops'
+import { mLabel, WS_MAP } from '@/domain/ipqc/workshops'
 import type { FqcClearRow, FqcNgRow, WorkshopFilter } from '@/domain/ipqc/types'
 import { useIpqcStore } from '@/stores/ipqc'
 
@@ -120,25 +119,39 @@ useWorkshopRoute()
 const key = computed(() => store.workshop as WorkshopFilter)
 const ws = computed(() => WS_MAP[key.value])
 const isAll = computed(() => key.value === '全部')
+const boardMonth = computed(() => store.boardMonth)
 const inWs = (dept: unknown) => isAll.value || shortDept(dept) === key.value
 
-const faList = computed(() => store.db.fa.filter((r) => inWs(r.dept)))
+const kpiRow = computed(() =>
+  isAll.value
+    ? allKpi(store.db, store.checkScores, boardMonth.value)
+    : wsKpi(
+        store.db,
+        store.checkScores,
+        key.value as Exclude<WorkshopFilter, '全部'>,
+        boardMonth.value
+      )
+)
+
+const faList = computed(() =>
+  store.db.fa.filter((r) => inWs(r.dept) && inMonth(r.date, boardMonth.value))
+)
 const fa = computed(() => {
   const s = faStats(faList.value)
   return {
     ...s,
-    faOK: faList.value.length ? 100 - s.ngRate : null,
+    faOK: kpiRow.value.faOK,
   }
 })
 
-const cmpList = computed(() => store.db.cmp.filter((c) => inWs(c.dept)))
-const cmp = computed(() => cmpStats(cmpList.value))
-
-const kpiRow = computed(() =>
-  isAll.value
-    ? allKpi(store.db, store.checkScores, 0)
-    : wsKpi(store.db, store.checkScores, key.value as Exclude<WorkshopFilter, '全部'>, 0)
+const cmpList = computed(() =>
+  store.db.cmp.filter((c) => inWs(c.dept) && inMonth(c.date, boardMonth.value))
 )
+const cmp = computed(() => ({
+  closeRate: kpiRow.value.cmpClose,
+  total: kpiRow.value.cmpN,
+  overdue: kpiRow.value.cmpOpen,
+}))
 const chkScore = computed(() =>
   isAll.value ? null : chkLatest(store.checkScores, key.value)
 )

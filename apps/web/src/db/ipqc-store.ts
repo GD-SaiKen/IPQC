@@ -16,7 +16,13 @@ const TABLE_KEYS = [
 export function isIpqcDb(value: unknown): value is IpqcDb {
   if (!value || typeof value !== 'object') return false
   const d = value as Record<string, unknown>
-  return TABLE_KEYS.every((k) => Array.isArray(d[k]))
+  return TABLE_KEYS.every((k) => {
+    const rows = d[k]
+    return (
+      Array.isArray(rows) &&
+      rows.every((row) => !!row && typeof row === 'object' && !Array.isArray(row))
+    )
+  })
 }
 
 export function loadDb(): IpqcDb {

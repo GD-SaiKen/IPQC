@@ -34,4 +34,13 @@ describe('ipqc-store · 备份导入', () => {
     ;(db as Record<string, unknown>).perf = 'x'
     expect(() => importDbJson(JSON.stringify(db))).toThrow()
   })
+
+  it('行不是对象（null / 原始值 / 数组）的备份被拒绝', () => {
+    const db = createDefaultDb() as unknown as Record<string, unknown>
+    ;(db.fa as unknown[]).push(null)
+    expect(() => importDbJson(JSON.stringify(db))).toThrow()
+    ;(db.fa as unknown[]).pop()
+    ;(db.fa as unknown[]).push(1, 'x', [])
+    expect(() => importDbJson(JSON.stringify(db))).toThrow()
+  })
 })

@@ -12,16 +12,19 @@ function cellValue(row: Record<string, unknown>, col: CsvColumn): string {
 
 /** 防公式 / DDE 注入：Excel 会把 = + - @ 开头的文本当公式执行 */
 function safeCell(text: string): string {
-  if (/^[=+\-@\t\r]/.test(text) && !/^-\d+(\.\d+)?$/.test(text)) return `'${text}`
+  const head = text.trimStart()
+  if (/^[=+\-@\t\r]/.test(head) && !/^-\d+(\.\d+)?$/.test(head)) return `'${text}`
   return text
 }
 
+function csvCell(text: string): string {
+  return `"${safeCell(text).replace(/"/g, '""')}"`
+}
+
 export function buildCsv(columns: CsvColumn[], rows: Record<string, unknown>[]): string {
-  const head = columns.map((c) => c.label).join(',')
+  const head = columns.map((c) => csvCell(c.label)).join(',')
   const body = rows.map((row) =>
-    columns
-      .map((c) => `"${safeCell(cellValue(row, c)).replace(/"/g, '""')}"`)
-      .join(',')
+    columns.map((c) => csvCell(cellValue(row, c))).join(',')
   )
   return [head, ...body].join('\r\n')
 }

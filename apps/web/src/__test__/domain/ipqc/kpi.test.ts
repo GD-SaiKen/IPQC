@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultDb, getCheckScores } from '@/domain/ipqc/seed'
 import { allKpi, boardAlerts, wsKpi } from '@/domain/ipqc/kpi'
+import { cmpStats } from '@/domain/ipqc/cmp'
+import { faStats } from '@/domain/ipqc/fa-rules'
+import { inMonth, shortDept } from '@/domain/ipqc/format'
 import { boardMatrix, checkTrend, complaintTrend, heatOf } from '@/domain/ipqc/trend'
 
 describe('kpi', () => {
@@ -59,6 +62,40 @@ describe('kpi · 热力矩阵与走势', () => {
     const jan = allKpi(db, scores, 1)
     const feb = allKpi(db, scores, 2)
     expect(jan.cmpN).not.toBe(feb.cmpN)
+  })
+
+  it('点检走势缺月保留 null，不回落为 0', () => {
+    const chk = checkTrend({ 注塑: { 1: 92 } }, '注塑')
+    expect(chk[0].data[0]).toBe(92)
+    expect(chk[0].data[1]).toBeNull()
+  })
+})
+
+describe('kpi · 车间总览月份口径', () => {
+  const db = createDefaultDb()
+  const scores = getCheckScores()
+
+  it('车间总览 KPI 跟随所选月份，与总看板同月一致', () => {
+    const jan = wsKpi(db, scores, '注塑', 1)
+    const year = wsKpi(db, scores, '注塑', 0)
+    expect(jan.faN).toBeLessThan(year.faN)
+    expect(jan.faOK).not.toBe(year.faOK)
+    expect(jan.cmpClose).not.toBe(year.cmpClose)
+    expect(jan.faOK).toBeCloseTo(50, 1)
+    expect(jan.cmpClose).toBeCloseTo(100, 1)
+    expect(jan.fqcRate).toBeCloseTo(7.42, 2)
+  })
+
+  it('首件与投诉明细按同一月份过滤后与 KPI 对齐', () => {
+    const janFa = db.fa.filter(
+      (r) => shortDept(r.dept) === '注塑' && inMonth(r.date, 1)
+    )
+    const janCmp = db.cmp.filter(
+      (c) => shortDept(c.dept) === '注塑' && inMonth(c.date, 1)
+    )
+    const k = wsKpi(db, scores, '注塑', 1)
+    expect(100 - faStats(janFa).ngRate).toBeCloseTo(k.faOK!, 5)
+    expect(cmpStats(janCmp).closeRate).toBeCloseTo(k.cmpClose!, 5)
   })
 })
 

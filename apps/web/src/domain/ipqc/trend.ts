@@ -98,7 +98,7 @@ export function matrixRatio(
 export interface TrendSeries {
   name: string
   color: string
-  data: number[]
+  data: (number | null)[]
 }
 
 export function complaintTrend(
@@ -121,7 +121,7 @@ export function checkTrend(
   return WORKSHOPS.filter((w) => workshop === '全部' || w.key === workshop).map((w) => ({
     name: w.name,
     color: w.color,
-    data: months.map((m) => chkMonthScore(checkScores, w.key, m) ?? 0),
+    data: months.map((m) => chkMonthScore(checkScores, w.key, m)),
   }))
 }
 

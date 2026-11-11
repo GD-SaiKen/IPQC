@@ -37,10 +37,20 @@ describe('chk', () => {
     expect(rank[0].latest).toBeGreaterThanOrEqual(rank[rank.length - 1].latest)
   })
 
+  it('月趋势按当月适用满分归一，不借用最近月满分', () => {
+    const rank = chkRank(scores, ['注塑毛边'])
+    expect(rank[0].max).toBe(60)
+    expect(rank[0].trend[0]).toBeCloseTo(85.5, 1)
+    expect(rank[0].trend[9]).toBeCloseTo(95.5, 1)
+  })
+
   it('趋势 1–10 月，缺月为 null', () => {
     const t = chkTrend(scores, '注塑')
     expect(t.length).toBe(10)
     expect(t[9]).toBe(93)
+    const partial = chkTrend({ 注塑: { 1: 92 } }, '注塑')
+    expect(partial[0]).toBe(92)
+    expect(partial[1]).toBeNull()
   })
 
   it('项明细分值合计与 140 / 毛边 40 对齐', () => {

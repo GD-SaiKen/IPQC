@@ -26,4 +26,11 @@ describe('buildCsv', () => {
     expect(csv).toContain('"他说""好"""')
     expect(csv).toContain('"a\nb"')
   })
+
+  it('前导空格后的公式前缀也被中和，表头统一加引号并转义', () => {
+    const csv = buildCsv([{ key: 'v', label: '  =标题"x"' }], [{ v: ' =1+1' }])
+    const [head, body] = csv.split('\r\n')
+    expect(head).toBe('"\'  =标题""x"""')
+    expect(body).toBe('"\' =1+1"')
+  })
 })

@@ -34,7 +34,9 @@ export function wsKpi(
   const fa = db.fa.filter((r) => same(r) && inMonth(r.date, m))
   const cm = db.cmp.filter((r) => same(r) && inMonth(r.date, m))
   const pf = db.perf.filter((r) => same(r) && inMonth(r.date, m))
-  const tr = db.trn.filter((r) => same(r) && inMonth(r.date, m))
+  const tr = db.trn.filter(
+    (r) => (same(r) || r.dept === '通用') && inMonth(r.date, m)
+  )
   const ngFa = fa.filter((r) => String(r.result).toUpperCase() === 'NG').length
   const closed = cm.filter((c) => c.actClose).length
   const chk = chkMonthScore(checkScores, key, m)

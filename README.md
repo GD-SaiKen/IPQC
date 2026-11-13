@@ -35,8 +35,8 @@ flowchart LR
 ## 在 IPQC 中使用
 
 1. 在仓库 **Settings → Secrets and variables → Actions** 配置 Secret `LLM_API_KEY`；
-2. 直接新建 Issue，或推送 `proposals/*.md`。建议写法见中心仓库 [怎么提 Issue](https://github.com/GD-SaiKen/auto-dev/blob/main/docs/怎么提Issue.md)，本仓模板在 `.github/ISSUE_TEMPLATE/`。写不全也会开始处理；
-3. 开发、PR、评审、修复和合并接着自动执行。改动跨多个功能，或动到对外接口、权限、数据结构时，PR 保持草稿。评审打回最多自动修复 3 轮。PR 上的 `ci` 会跑 lint、test、build，没通过不会合并。
+2. 直接新建 Issue，或推送 `proposals/*.md`。小白向全流程见中心仓库 [流水线全流程](https://github.com/GD-SaiKen/auto-dev/blob/main/docs/流水线全流程.md)；提 Issue 写法见 [怎么提 Issue](https://github.com/GD-SaiKen/auto-dev/blob/main/docs/怎么提Issue.md)。本仓模板在 `.github/ISSUE_TEMPLATE/`。写不全也会开始处理；
+3. 开发、PR、评审、修复和合并接着自动执行。改动跨多个功能，或动到对外接口、权限、数据结构时，PR 保持草稿。评审打回或 `ci` 失败都会自动修复，合计最多 3 轮 `auto: fix` 提交。PR 上的 `ci` 跑 lint、test、build，没通过不会自动合并（可人工合并）。
 
 可选 Variables：`LLM_MODEL`（默认 `kimi-for-coding`）、`LLM_BASE_URL`、`KIMI_CLI_VERSION`（默认 `latest`）。
 

@@ -23,22 +23,20 @@ pnpm build
 
 ```mermaid
 flowchart LR
-    A[Issue 带 proposal 标签<br/>或 proposals/*.md 推送] --> B[auto-plan<br/>生成开发方案]
-    B --> C{人工审核<br/>加 approved 标签}
-    C --> D[auto-develop<br/>Kimi Code 开发并测试]
+    A[打开 Issue<br/>或推送 proposals/*.md] --> D[auto-develop<br/>Kimi Code 开发并测试]
     D --> E[提交 auto/ 分支 PR]
     E --> F[auto-review<br/>自动代码评审]
-    F -- Approve --> G[auto-merge<br/>squash 合并 + 删除分支]
+    F -- Approve 且 CI 通过 --> G[auto-merge<br/>squash 合并 + 删除分支]
     F -- Request changes --> H[auto-fix<br/>自动修复并重新评审]
     H --> E
+    D --> R[改动面大则草稿 PR<br/>等人确认]
 ```
 
 ## 在 IPQC 中使用
 
 1. 在仓库 **Settings → Secrets and variables → Actions** 配置 Secret `LLM_API_KEY`；
-2. 新建 Issue 并加 `proposal` 标签，或推送 `proposals/*.md`；
-3. 阅读机器人评论中的方案，审核通过后添加 `approved` 标签；
-4. 后续开发、PR、评审、修复和合并自动执行；评审打回最多自动修复 3 轮。
+2. 直接新建 Issue，或推送 `proposals/*.md`。建议写法见中心仓库 [怎么提 Issue](https://github.com/GD-SaiKen/auto-dev/blob/main/docs/怎么提Issue.md)，本仓模板在 `.github/ISSUE_TEMPLATE/`。写不全也会开始处理；
+3. 开发、PR、评审、修复和合并接着自动执行。改动跨多个功能，或动到对外接口、权限、数据结构时，PR 保持草稿。评审打回最多自动修复 3 轮。PR 上的 `ci` 会跑 lint、test、build，没通过不会合并。
 
 可选 Variables：`LLM_MODEL`（默认 `kimi-for-coding`）、`LLM_BASE_URL`、`KIMI_CLI_VERSION`（默认 `latest`）。
 
@@ -47,8 +45,7 @@ flowchart LR
 复制中心仓库的 `examples/consumer/.github/workflows/` 下 5 个文件到目标仓库相同位置，保持文件名不变，然后：
 
 1. 配置目标仓库的 `LLM_API_KEY`；
-2. 创建 `proposal`、`plan-ready`、`approved` 标签；
-3. 将方案文档放入 `proposals/`，或创建带 `proposal` 标签的 Issue。
+2. 直接新建 Issue，或把方案放进 `proposals/`。可选模板在中心仓库 `examples/consumer/.github/ISSUE_TEMPLATE/`。
 
 详细接入说明见[中心仓库 README](https://github.com/GD-SaiKen/auto-dev#readme)。业务仓库不需要复制 Prompt 或安装 Action。
 

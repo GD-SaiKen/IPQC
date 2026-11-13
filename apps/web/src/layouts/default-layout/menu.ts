@@ -1,5 +1,6 @@
 import type { WorkshopFilter, WorkshopKey } from '@/domain/ipqc/types'
 import { WORKSHOPS } from '@/domain/ipqc/workshops'
+import type { IconName } from './icons'
 
 export interface NavItem {
   key: string
@@ -27,6 +28,20 @@ const SUB_WORKSHOP_ITEMS: Omit<NavItem, 'badge'>[] = [
   { key: 'trn', label: '培训与技能', icon: 'Notebook', routeName: 'trn' },
   { key: 'perf', label: '工作绩效', icon: 'Medal', routeName: 'perf' },
 ]
+
+/** 每个车间一个独立图标，避免侧栏「车间子工作台」条目无法区分 */
+const WORKSHOP_ICONS: Record<WorkshopKey, IconName> = {
+  注塑: 'Box',
+  注塑毛边: 'Scissor',
+  压铸: 'Coin',
+  五金: 'Tools',
+  涂装: 'Brush',
+  印刷: 'Printer',
+}
+
+function workshopIcon(key: WorkshopKey): IconName {
+  return WORKSHOP_ICONS[key] ?? 'Shop'
+}
 
 export function isMenuItemActive(
   item: NavItem,
@@ -71,7 +86,7 @@ export function buildIpqcMenuGroups(
         items: WORKSHOPS.map((w) => ({
           key: `ws-${w.key}`,
           label: w.name,
-          icon: 'Shop',
+          icon: workshopIcon(w.key),
           workshopEnter: w.key,
           badge: badges[`ws-${w.key}`],
         })),
@@ -98,7 +113,7 @@ export function buildIpqcMenuGroups(
         ...WORKSHOPS.filter((w) => w.key !== workshop).map((w) => ({
           key: `ws-${w.key}`,
           label: w.name,
-          icon: 'Shop',
+          icon: workshopIcon(w.key),
           workshopEnter: w.key,
         })),
       ],

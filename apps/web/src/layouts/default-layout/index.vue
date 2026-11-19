@@ -107,6 +107,37 @@
           >
             <el-icon :size="18"><Printer /></el-icon>
           </button>
+          <el-dropdown v-if="authState.user" trigger="hover" @command="onUserCommand">
+            <button type="button" class="user-menu-trigger" aria-label="打开用户菜单">
+              <svg
+                class="avatar"
+                viewBox="0 0 32 32"
+                role="img"
+                :aria-label="`${displayName}的头像`"
+              >
+                <circle cx="16" cy="16" r="16" fill="url(#user-avatar-gradient)" />
+                <text x="16" y="16" dominant-baseline="central" text-anchor="middle">{{ avatarChar }}</text>
+                <defs>
+                  <linearGradient id="user-avatar-gradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#3b6fe0" />
+                    <stop offset="100%" stop-color="#0ea5e9" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span class="user-menu-info">
+                <span class="user-menu-name">{{ displayName }}</span>
+                <span class="user-menu-role">{{ displayRole }}</span>
+              </span>
+              <el-icon class="user-menu-arrow"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout" divided>
+                  <el-icon><SwitchButton /></el-icon>退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
@@ -120,17 +151,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Expand, Fold, Printer } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, Expand, Fold, Printer, SwitchButton } from '@element-plus/icons-vue'
 
 import { buildIpqcMenuGroups, isMenuItemActive } from './menu'
 import type { NavItem } from './menu'
 import { resolveIcon } from './icons'
+import { getAvatarChar, getDisplayRole } from './user-menu'
 import { usePageTitle } from '@/composables/use-page-title'
 import { useSidebar } from '@/composables/use-sidebar'
 import { useWorkshopRoute } from '@/composables/use-workshop-route'
 import { WORKSHOPS } from '@/domain/ipqc/workshops'
 import type { WorkshopFilter } from '@/domain/ipqc/types'
 import { useIpqcStore } from '@/stores/ipqc'
+import { authState, setAuthUser } from '@/stores/auth'
+import { logout } from '@/api/auth'
+import { resetAuthResolved } from '@/router'
 
 const APP_NAME = '品质保证部 · IPQC 智能工作台'
 
@@ -141,7 +176,6 @@ const { collapsed, toggle } = useSidebar()
 const { pageTitle: livePageTitle } = usePageTitle()
 const { enterWorkshop, backToBoard } = useWorkshopRoute()
 const boardMode = ref(false)
-
 const menuGroups = computed(() => buildIpqcMenuGroups(store.workshop))
 
 const chipList = computed(() => ['全部', ...WORKSHOPS.map((w) => w.key)] as WorkshopFilter[])
@@ -206,9 +240,28 @@ function goBack(): void {
   else void router.push(parentCrumb.value.to)
 }
 
+const avatarChar = computed(() => getAvatarChar(authState.user))
+const displayName = computed(() => authState.user?.displayName ?? '未登录')
+const displayRole = computed(() => getDisplayRole(authState.user?.role))
+
+async function onUserCommand(command: string): Promise<void> {
+  if (command === 'logout') await onLogout()
+}
+
 function onChip(w: WorkshopFilter): void {
   if (w === '全部') backToBoard()
   else enterWorkshop(w)
+}
+
+
+async function onLogout(): Promise<void> {
+  try {
+    await logout()
+  } finally {
+    setAuthUser(null)
+    resetAuthResolved()
+    await router.push({ name: 'login' })
+  }
 }
 
 function onPrint(): void {
@@ -564,18 +617,84 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: none;
-  max-width: 55%;
+  min-width: 0;
+  flex: 2;
 }
 
+.user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 2px 2px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger:focus-visible {
+  background: #f1f5f9;
+  outline: none;
+}
+
+.avatar {
+  display: block;
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+
+.avatar text {
+  fill: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.user-menu-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+
+.user-menu-name,
+.user-menu-role {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-name {
+  color: #1f2733;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-menu-role {
+  color: #7a8494;
+  font-size: 11px;
+}
+
+.user-menu-arrow {
+  color: #7a8494;
+  font-size: 14px;
+}
 .ws-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
+
 .chip {
+  flex: none;
+  white-space: nowrap;
   border: 1px solid #e2e8f0;
   background: #fff;
   border-radius: 999px;
@@ -627,3 +746,5 @@ onBeforeUnmount(() => {
   background: #f4f7fb;
 }
 </style>
+
+

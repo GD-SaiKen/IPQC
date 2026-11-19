@@ -1,0 +1,95 @@
+@import './tokens.css';
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--van-base-font);
+  color: var(--van-text-color);
+  background: var(--van-background);
+}
+
+.mobile-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.mobile-app__main {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+.mobile-app__main--embed {
+  overflow: hidden;
+}
+
+.mobile-app__main--embed > * {
+  height: 100%;
+  min-height: 0;
+}
+
+.mobile-app__navbar {
+  /* 与底部 Tab 一致：fixed + placeholder，并预留刘海安全区 */
+  --van-nav-bar-background: var(--van-background-2, #fff);
+}
+
+.mobile-app__tabbar {
+  padding-bottom: var(--safe-bottom);
+}
+
+:root.keyboard-open .mobile-app__tabbar {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(100%);
+  transition:
+    transform 0.25s ease,
+    opacity 0.25s ease,
+    visibility 0.25s;
+}
+
+.om-icon {
+  display: block;
+  flex-shrink: 0;
+  width: var(--om-icon-size, var(--om-icon-md));
+  height: var(--om-icon-size, var(--om-icon-md));
+}
+
+.om-icon--xs {
+  --om-icon-size: var(--om-icon-xs);
+}
+
+.om-icon--sm {
+  --om-icon-size: var(--om-icon-sm);
+}
+
+.om-icon--lg {
+  --om-icon-size: var(--om-icon-lg);
+}
+
+.om-icon--xl {
+  --om-icon-size: var(--om-icon-xl);
+}

@@ -1,0 +1,127 @@
+/// 看板页 SCSS 片段：合并进项目 `styles/mixins.scss`，或页面 scoped 内 @use。
+/// 依赖：页面已用 [knowledge/crud](../crud/) 的 `.crud-root` 结构。
+/// 契约见 ../../echarts.md
+
+/// KPI + 图表 + 表格的统计看板页：图表展开不压缩表格，内容超出时整页滚动
+@mixin dashboard-page-layout {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+
+  :deep(.kpi-board),
+  :deep(.charts-panel) {
+    flex-shrink: 0;
+  }
+
+  :deep(.el-loading-mask) {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+  }
+
+  @media (max-width: 760px) {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+}
+
+/// 看板页底部明细区 flex 骨架：至少占满内容区一屏，表格在内部滚动
+@mixin dashboard-table-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 100%;
+  overflow: hidden;
+
+  :deep(.crud-root) {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+  }
+
+  @media (max-width: 760px) {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+
+    :deep(.crud-root) {
+      flex: none;
+      min-height: 0;
+      height: auto;
+    }
+  }
+}
+
+/// 用法：明细容器 class="dashboard-detail-panel" + @include dashboard-detail-panel
+@mixin dashboard-detail-panel {
+  @include dashboard-table-section;
+  padding: 14px 20px 16px;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: var(--el-border-radius-base, 4px);
+  background-color: var(--el-bg-color, #fff);
+
+  :deep(.crud-table) {
+    flex: 1;
+    min-height: 0;
+
+    > * {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  :deep(.table-wrapper) {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+  }
+
+  @media (max-width: 760px) {
+    padding: 12px;
+
+    :deep(.crud-filters),
+    :deep(.table-filters) {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    :deep(.crud-filters .el-select),
+    :deep(.crud-filters .el-input),
+    :deep(.table-filters .el-select),
+    :deep(.table-filters .el-input) {
+      width: 100% !important;
+      min-width: 0;
+    }
+
+    :deep(.crud-table),
+    :deep(.table-wrapper) {
+      flex: none;
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+    }
+
+    :deep(.crud-table) > * {
+      flex: none;
+      height: auto;
+      min-height: 0;
+    }
+  }
+}
+
+/// 看板页 el-table 行高（44px，与桌面看板表格统一）
+@mixin dashboard-table-rows {
+  :deep(.el-table__row) {
+    height: 44px;
+  }
+}

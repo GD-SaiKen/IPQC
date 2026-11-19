@@ -3,10 +3,20 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "pnpm --filter @ipqc/web dev",
-    "build": "pnpm --filter @ipqc/web build",
-    "test": "pnpm --filter @ipqc/web test",
-    "lint": "pnpm --filter @ipqc/web lint",
-    "extract-seed": "node scripts/extract-prototype-seed.mjs"
+    "dev": "concurrently -n web,api -c green,cyan \"pnpm --filter @ipqc/web dev\" \"pnpm --filter @ipqc/api run dev\"",
+    "dev:web": "pnpm --filter @ipqc/web dev",
+    "dev:api": "pnpm --filter @ipqc/api run dev",
+    "build": "pnpm --filter @ipqc/web build && pnpm --filter @ipqc/api run build",
+    "test": "pnpm --filter @ipqc/web test && pnpm --filter @ipqc/api test",
+    "lint": "pnpm --filter @ipqc/web lint && pnpm --filter @ipqc/api lint",
+    "extract-seed": "node scripts/extract-prototype-seed.mjs",
+    "prisma:generate": "prisma generate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prisma": "^6.19.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0"
   }
 }

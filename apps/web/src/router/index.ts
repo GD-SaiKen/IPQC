@@ -1,10 +1,24 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { getCurrentUser } from '@/api/auth'
 import { WORKSHOPS } from '@/domain/ipqc/workshops'
+import { authState, setAuthUser } from '@/stores/auth'
 
 const WS_KEYS = new Set<string>(['全部', ...WORKSHOPS.map((w) => w.key)])
 
 const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/login/index.vue'),
+    meta: { title: '登录', public: true },
+  },
+  {
+    path: '/login/callback',
+    name: 'login-callback',
+    component: () => import('@/views/login/callback.vue'),
+    meta: { title: '登录', public: true },
+  },
   {
     path: '/',
     component: () => import('@/layouts/default-layout/index.vue'),
@@ -111,14 +125,39 @@ export const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+let authResolved = false
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) {
+    return true
+  }
+
+  if (!authResolved) {
+    try {
+      setAuthUser(await getCurrentUser())
+    } catch {
+      setAuthUser(null)
+    }
+    authResolved = true
+  }
+
+  if (!authState.user) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
   const ws = String(to.query.ws ?? '全部')
-  const mode = to.meta.workshopMode as string | undefined
+  const mode = to.meta.workshopMode
   if (mode === 'workshop' && (ws === '全部' || !WS_KEYS.has(ws))) {
     return { path: '/board', query: { ws: '全部' } }
   }
-  if (mode === 'all' && ws !== '全部' && to.name !== 'data') {
-    /* 车间子页由布局导航进入 */
-  }
+
   return true
 })
+
+export function markAuthResolved(): void {
+  authResolved = true
+}
+
+export function resetAuthResolved(): void {
+  authResolved = false
+}

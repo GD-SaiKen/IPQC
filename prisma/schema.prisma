@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  phone         String   @unique @db.VarChar(11)
+  displayName   String   @map("display_name") @db.VarChar(64)
+  dataHubUserId String?  @unique @map("data_hub_user_id") @db.Uuid
+  role          String   @default("user") @db.VarChar(16)
+  delFlag       Int      @default(0) @map("del_flag")
+  createTime    DateTime @default(now()) @map("create_time") @db.Timestamptz(3)
+  updateTime    DateTime @updatedAt @map("update_time") @db.Timestamptz(3)
+
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model OauthLogin {
+  id           String   @id @default(uuid()) @db.Uuid
+  stateHash    String   @unique @map("state_hash") @db.VarChar(64)
+  codeVerifier String   @map("code_verifier") @db.VarChar(128)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@map("oauth_logins")
+}

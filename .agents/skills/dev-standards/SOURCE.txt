@@ -1,0 +1,2 @@
+﻿Canonical source: G:\workspace\skills\dev-standards
+Synchronize this installed copy after any canonical skill update.

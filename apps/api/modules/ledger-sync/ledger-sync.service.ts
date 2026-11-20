@@ -92,12 +92,26 @@ export class LedgerSyncService {
     }
   }
 
-  private async resolveFiles(user: AuthUser, body: LedgerSyncBodyDto) {
-    const rootPath = normalizeRootPath(body.rootPath ?? '')
-    const rootError = validateRootPath(rootPath)
-    if (rootError) {
-      throw apiError(400, rootError, 'bad_request')
+  private resolvePreferRootPaths(body: LedgerSyncBodyDto): string[] | undefined {
+    const raw: string[] = []
+    if (body.rootPath?.trim()) {
+      raw.push(body.rootPath)
     }
+    if (body.rootPaths?.length) {
+      raw.push(...body.rootPaths)
+    }
+    const normalized = [...new Set(raw.map((item) => normalizeRootPath(item)).filter(Boolean))]
+    for (const path of normalized) {
+      const rootError = validateRootPath(path)
+      if (rootError) {
+        throw apiError(400, rootError, 'bad_request')
+      }
+    }
+    return normalized.length > 0 ? normalized : undefined
+  }
+
+  private async resolveFiles(user: AuthUser, body: LedgerSyncBodyDto) {
+    const preferRootPaths = this.resolvePreferRootPaths(body)
     const accessToken = await this.auth.getDataHubAccessToken(user.id)
     const shares = await this.safeHub(() =>
       listShares(this.config.dataHubOAuth.apiOrigin, accessToken, globalThis.fetch),
@@ -115,9 +129,7 @@ export class LedgerSyncService {
         globalThis.fetch,
       ),
     )
-    const matched = matchLedgerFiles(hits, {
-      preferRootPath: rootPath || undefined,
-    })
+    const matched = matchLedgerFiles(hits, { preferRootPaths })
     if (matched.kind === 'reject') {
       throw apiError(400, matched.message, 'bad_request')
     }

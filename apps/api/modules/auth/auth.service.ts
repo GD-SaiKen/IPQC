@@ -183,6 +183,15 @@ export class AuthService {
     return { linked: true, dataHubUserId: me.id }
   }
 
+  async unlinkDataHubLink(userId: string): Promise<{ linked: false }> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, delFlag: 0 } })
+    if (!user) {
+      throw apiError(401, '请先登录', 'unauthorized')
+    }
+    await this.clearRefreshToken(userId)
+    return { linked: false }
+  }
+
   async getDataHubAccessToken(userId: string): Promise<string> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, delFlag: 0 },

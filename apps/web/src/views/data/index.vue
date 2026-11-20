@@ -17,9 +17,6 @@
 
       <div class="sync-block no-print">
         <h4 class="sync-title">从共享盘同步</h4>
-        <p class="muted small">
-          使用你在 data-hub 已绑定的共享盘读取台账 Excel。先核对文件与条数，确认后才写入本机（培训相关表保留）。
-        </p>
         <div v-if="!dataHubLinked" class="sync-auth no-print">
           <el-alert type="warning" show-icon :closable="false" title="尚未授权 data-hub 共享盘访问" />
           <el-button type="primary" class="sync-link-btn" :loading="linking" @click="onConnectDataHub">
@@ -27,7 +24,19 @@
           </el-button>
           <p class="muted small">密码仅在 data-hub 页面输入；与本页 IPQC 登录无关。</p>
         </div>
-        <p v-else class="muted small sync-linked">已连接 data-hub，可选择共享盘核对台账。</p>
+        <div v-else class="sync-linked-row">
+          <p class="muted small sync-linked">已连接 data-hub，可选择共享盘核对台账。</p>
+          <div class="sync-linked-actions">
+            <el-button type="primary" link :loading="linking" @click="onConnectDataHub">
+              <el-icon><Refresh /></el-icon>
+              重新授权
+            </el-button>
+            <el-button type="danger" link :loading="unlinking" @click="onUnlinkDataHub">
+              <el-icon><SwitchButton /></el-icon>
+              解除连接
+            </el-button>
+          </div>
+        </div>
         <div class="sync-form">
           <el-select
             v-model="shareId"
@@ -48,8 +57,10 @@
             :props="dirCascaderProps"
             class="sync-path"
             clearable
+            collapse-tags
+            collapse-tags-tooltip
             :disabled="!shareId"
-            placeholder="选择台账根目录（可留空=整盘）"
+            placeholder="选择台账根目录（可多选，可留空=整盘）"
           />
           <el-button type="primary" :loading="previewing" :disabled="!shareId" @click="onPreviewSync">
             核对文件
@@ -133,9 +144,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Refresh, SwitchButton } from '@element-plus/icons-vue'
 import type { CascaderProps, CascaderOption } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDataHubLinkStatus, startDataHubLink } from '@/api/auth'
+import { getDataHubLinkStatus, startDataHubLink, unlinkDataHubLink } from '@/api/auth'
 import {
   listLedgerShares,
   listShareDirectories,
@@ -155,20 +167,21 @@ const store = useIpqcStore()
 const fileRef = ref<HTMLInputElement | null>(null)
 const shares = ref<LedgerShareItem[]>([])
 const shareId = ref('')
-const rootPath = ref('')
-const rootPathPicker = ref<string[]>([])
+const rootPaths = ref<string[]>([])
+const rootPathPicker = ref<string[][]>([])
 
 watch(shareId, () => {
   rootPathPicker.value = []
-  rootPath.value = ''
+  rootPaths.value = []
 })
 
-watch(rootPathPicker, (segments) => {
-  rootPath.value = segments.length > 0 ? segments.join('/') : ''
+watch(rootPathPicker, (selections) => {
+  rootPaths.value = selections.map((segments) => segments.join('/')).filter(Boolean)
 })
 
 const dirCascaderProps: CascaderProps = {
   lazy: true,
+  multiple: true,
   checkStrictly: true,
   emitPath: true,
   async lazyLoad(node, resolve) {
@@ -202,6 +215,7 @@ const previewing = ref(false)
 const syncing = ref(false)
 const dataHubLinked = ref(false)
 const linking = ref(false)
+const unlinking = ref(false)
 const previewResult = ref<{
   files: Array<{ role: string; label: string; path: string; modifiedAt?: string }>
   counts: Record<string, number>
@@ -255,6 +269,34 @@ async function onConnectDataHub(): Promise<void> {
   }
 }
 
+async function onUnlinkDataHub(): Promise<void> {
+  if (unlinking.value) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '解除后需重新授权才能从共享盘核对台账；本机已写入的数据不受影响。',
+      '解除 data-hub 连接',
+      { type: 'warning', confirmButtonText: '解除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  unlinking.value = true
+  try {
+    await unlinkDataHubLink()
+    dataHubLinked.value = false
+    shares.value = []
+    shareId.value = ''
+    rootPathPicker.value = []
+    rootPaths.value = []
+    previewResult.value = null
+    ElMessage.success('已解除 data-hub 连接')
+  } finally {
+    unlinking.value = false
+  }
+}
+
 function formatPreviewCounts(_role: string): string {
   if (!previewResult.value) return '—'
   const c = previewResult.value.counts
@@ -267,7 +309,7 @@ async function onPreviewSync(): Promise<void> {
   try {
     previewResult.value = await previewLedgerSync({
       shareId: shareId.value,
-      rootPath: rootPath.value,
+      rootPaths: rootPaths.value.length > 0 ? rootPaths.value : undefined,
     })
   } finally {
     previewing.value = false
@@ -287,7 +329,10 @@ async function onConfirmSync(): Promise<void> {
   }
   syncing.value = true
   try {
-    const data = await syncLedger({ shareId: shareId.value, rootPath: rootPath.value })
+    const data = await syncLedger({
+      shareId: shareId.value,
+      rootPaths: rootPaths.value.length > 0 ? rootPaths.value : undefined,
+    })
     store.db = mergeLedgerSnapshot(store.db, data.snapshot)
     if (data.checkScores) {
       store.checkScores = mergeCheckScores(store.checkScores, data.checkScores)
@@ -544,8 +589,20 @@ async function onReset(): Promise<void> {
 .sync-link-btn {
   margin-top: 2px;
 }
+.sync-linked-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
 .sync-linked {
-  margin: 10px 0 0;
+  margin: 0;
+}
+.sync-linked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 .sync-form {
   display: flex;

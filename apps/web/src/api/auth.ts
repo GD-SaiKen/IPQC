@@ -36,3 +36,9 @@ export function finishDataHubLink(payload: {
     requestOptions: { showSuccess: false, showError: true, sessionExpiredOn401: true },
   })
 }
+
+export function unlinkDataHubLink(): Promise<{ linked: false }> {
+  return request.post(`${AUTH}/data-hub/link/unlink`, undefined, {
+    requestOptions: { showSuccess: false, showError: true, sessionExpiredOn401: true },
+  })
+}

@@ -1,6 +1,6 @@
 import { IsOptional, IsString } from 'class-validator'
 
-export class DataHubCallbackDto {
+export class DataHubLinkCallbackDto {
   @IsOptional()
   @IsString()
   code?: string

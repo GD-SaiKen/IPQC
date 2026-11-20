@@ -14,10 +14,39 @@
 
         <div class="login-panel__body">
           <h2 id="login-heading" class="login-panel__title">登录</h2>
-          <p class="login-panel__hint">使用 data-hub 统一账号登录，密码只在 data-hub 输入。</p>
-          <el-button type="primary" class="login-submit" :loading="submitting" @click="onLogin">
-            使用 data-hub 登录
-          </el-button>
+          <p class="login-panel__hint">使用本系统手机号与密码登录。</p>
+          <el-form
+            ref="formRef"
+            :model="form"
+            :rules="rules"
+            label-width="64px"
+            label-position="right"
+            @submit.prevent
+          >
+            <el-form-item label="手机号" prop="phone">
+              <el-input
+                ref="phoneRef"
+                v-model="form.phone"
+                autocomplete="username"
+                maxlength="20"
+                placeholder="11 位手机号"
+              />
+            </el-form-item>
+            <el-form-item label="密码" prop="password">
+              <el-input
+                ref="passwordRef"
+                v-model="form.password"
+                type="password"
+                show-password
+                autocomplete="current-password"
+                placeholder="登录密码"
+                @keyup.enter="onSubmit"
+              />
+            </el-form-item>
+            <el-button type="primary" class="login-submit" :loading="submitting" @click="onSubmit">
+              登录
+            </el-button>
+          </el-form>
         </div>
       </section>
     </div>
@@ -25,15 +54,39 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { onMounted, reactive, ref } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 
-import { startDataHubLogin } from '@/api/auth'
-
-const REDIRECT_KEY = 'ipqc_login_redirect'
+import { login } from '@/api/auth'
+import { markAuthResolved } from '@/router'
+import { setAuthUser } from '@/stores/auth'
+import { request } from '@/utils/request'
 
 const route = useRoute()
+const vueRouter = useRouter()
+const formRef = ref<FormInstance>()
+const phoneRef = ref<{ focus?: () => void }>()
+const passwordRef = ref<{ focus?: () => void }>()
 const submitting = ref(false)
+
+const form = reactive({
+  phone: '',
+  password: '',
+})
+
+const rules: FormRules = {
+  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+}
+
+function redirectTarget(): string {
+  const q = route.query.redirect
+  if (typeof q === 'string' && q.startsWith('/') && !q.startsWith('//')) {
+    return q
+  }
+  return '/board'
+}
 
 function clearStaleLoadingMasks(): void {
   document.querySelectorAll('body > .el-loading-mask').forEach((el) => el.remove())
@@ -41,23 +94,28 @@ function clearStaleLoadingMasks(): void {
 
 onMounted(() => {
   clearStaleLoadingMasks()
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/board'
-  sessionStorage.setItem(REDIRECT_KEY, redirect)
+  phoneRef.value?.focus?.()
 })
 
-async function onLogin(): Promise<void> {
+async function onSubmit(): Promise<void> {
   if (submitting.value) {
+    return
+  }
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) {
     return
   }
   submitting.value = true
   try {
-    const { authorizeUrl } = await startDataHubLogin()
-    const state = new URL(authorizeUrl).searchParams.get('state')
-    if (state) {
-      sessionStorage.setItem('ipqc_oauth_state', state)
+    const user = await login({ phone: form.phone.trim(), password: form.password })
+    setAuthUser(user)
+    markAuthResolved()
+    await vueRouter.replace(redirectTarget())
+  } catch (error) {
+    if (request.isUnauthorized(error)) {
+      passwordRef.value?.focus?.()
     }
-    window.location.assign(authorizeUrl)
-  } catch {
+  } finally {
     submitting.value = false
   }
 }
@@ -155,6 +213,7 @@ async function onLogin(): Promise<void> {
 .login-submit {
   width: 100%;
   height: 40px;
+  margin-top: 4px;
 }
 
 @media (max-width: 760px) {

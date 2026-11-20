@@ -13,7 +13,11 @@ model User {
   displayName   String   @map("display_name") @db.VarChar(64)
   dataHubUserId String?  @unique @map("data_hub_user_id") @db.Uuid
   role          String   @default("user") @db.VarChar(16)
+  passwordHash  String?  @map("password_hash") @db.VarChar(60)
   delFlag       Int      @default(0) @map("del_flag")
+  dataHubRefreshCiphertext String? @map("data_hub_refresh_ciphertext") @db.Text
+  dataHubRefreshNonce      String? @map("data_hub_refresh_nonce") @db.VarChar(32)
+  dataHubRefreshKeyVersion Int?    @map("data_hub_refresh_key_version")
   createTime    DateTime @default(now()) @map("create_time") @db.Timestamptz(3)
   updateTime    DateTime @updatedAt @map("update_time") @db.Timestamptz(3)
 
@@ -41,3 +45,4 @@ model OauthLogin {
 
   @@map("oauth_logins")
 }
+

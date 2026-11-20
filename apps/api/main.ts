@@ -50,7 +50,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 3006)
   await app.listen(port)
-  logger.log(`IPQC API http://localhost:${port}/api/v1`)
+  logger.log(`IPQC API http://localhost:${port}/api`)
 }
 
 void bootstrap()

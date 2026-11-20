@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 .worktrees/
 .superpowers/
+
+# 本地环境变量（保留各目录 .env.example 作模板）
+.env
+!.env.example

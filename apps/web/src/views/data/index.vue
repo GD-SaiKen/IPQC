@@ -15,6 +15,75 @@
         最近保存：{{ store.lastSavedAt || '尚未保存' }} · 导入会覆盖全库，恢复种子会清除本机全部编辑。
       </p>
 
+      <div class="sync-block no-print">
+        <h4 class="sync-title">从共享盘同步</h4>
+        <p class="muted small">
+          使用你在 data-hub 已绑定的共享盘读取台账 Excel。先核对文件与条数，确认后才写入本机（培训相关表保留）。
+        </p>
+        <div v-if="!dataHubLinked" class="sync-auth no-print">
+          <el-alert type="warning" show-icon :closable="false" title="尚未授权 data-hub 共享盘访问" />
+          <el-button type="primary" class="sync-link-btn" :loading="linking" @click="onConnectDataHub">
+            连接 data-hub（授权共享盘）
+          </el-button>
+          <p class="muted small">密码仅在 data-hub 页面输入；与本页 IPQC 登录无关。</p>
+        </div>
+        <p v-else class="muted small sync-linked">已连接 data-hub，可选择共享盘核对台账。</p>
+        <div class="sync-form">
+          <el-select
+            v-model="shareId"
+            placeholder="选择已就绪的共享盘"
+            clearable
+            class="sync-share"
+          >
+            <el-option
+              v-for="item in readyShares"
+              :key="item.id"
+              :label="`${item.name}（${item.status}）`"
+              :value="item.id"
+            />
+          </el-select>
+          <el-cascader
+            :key="shareId || 'no-share'"
+            v-model="rootPathPicker"
+            :props="dirCascaderProps"
+            class="sync-path"
+            clearable
+            :disabled="!shareId"
+            placeholder="选择台账根目录（可留空=整盘）"
+          />
+          <el-button type="primary" :loading="previewing" :disabled="!shareId" @click="onPreviewSync">
+            核对文件
+          </el-button>
+        </div>
+        <ul v-if="disabledShares.length" class="sync-hint muted small">
+          <li v-for="item in disabledShares" :key="item.id">
+            {{ item.name }}：{{ item.status }}，请先在 data-hub 完成绑定与凭据
+          </li>
+        </ul>
+        <div v-if="previewResult" class="sync-preview">
+          <table class="src-table">
+            <thead>
+              <tr>
+                <th>角色</th>
+                <th>路径</th>
+                <th>将写入条数（合计）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="file in previewResult.files" :key="file.path">
+                <td>{{ file.label }}</td>
+                <td class="file">{{ file.path }}</td>
+                <td class="nowrap">{{ formatPreviewCounts(file.role) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="actions" style="margin-top: 12px">
+            <el-button type="primary" :loading="syncing" @click="onConfirmSync">确认写入本机</el-button>
+            <el-button @click="previewResult = null">取消</el-button>
+          </div>
+        </div>
+      </div>
+
       <div class="count-grid">
         <div v-for="t in TABLES" :key="t.key" class="count-card">
           <div class="count-label">{{ t.label }}</div>
@@ -63,16 +132,173 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import type { CascaderProps, CascaderOption } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getDataHubLinkStatus, startDataHubLink } from '@/api/auth'
+import {
+  listLedgerShares,
+  listShareDirectories,
+  previewLedgerSync,
+  syncLedger,
+  type LedgerShareItem,
+} from '@/api/ledger-sync'
+import { request } from '@/utils/request'
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
+import { mergeCheckScores, mergeLedgerSnapshot } from '@/domain/ipqc/merge-snapshot'
 import { CALIBER_GROUPS, DATA_SOURCES } from '@/domain/ipqc/sources'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
 const fileRef = ref<HTMLInputElement | null>(null)
+const shares = ref<LedgerShareItem[]>([])
+const shareId = ref('')
+const rootPath = ref('')
+const rootPathPicker = ref<string[]>([])
+
+watch(shareId, () => {
+  rootPathPicker.value = []
+  rootPath.value = ''
+})
+
+watch(rootPathPicker, (segments) => {
+  rootPath.value = segments.length > 0 ? segments.join('/') : ''
+})
+
+const dirCascaderProps: CascaderProps = {
+  lazy: true,
+  checkStrictly: true,
+  emitPath: true,
+  async lazyLoad(node, resolve) {
+    if (!shareId.value) {
+      resolve([])
+      return
+    }
+    const parentPath =
+      node.level === 0 ? '' : String((node.data as { fullPath?: string }).fullPath ?? '')
+    try {
+      const data = await listShareDirectories(shareId.value, parentPath)
+      const list = data.list ?? []
+      const options: CascaderOption[] = list.map((item) => ({
+        value: item.name,
+        label: item.name,
+        leaf: false,
+        fullPath: item.path,
+      }))
+      resolve(options)
+    } catch (error) {
+      resolve([])
+      if (request.isDataHubUnauthorized(error)) {
+        dataHubLinked.value = false
+        shares.value = []
+        shareId.value = ''
+      }
+    }
+  },
+}
+const previewing = ref(false)
+const syncing = ref(false)
+const dataHubLinked = ref(false)
+const linking = ref(false)
+const previewResult = ref<{
+  files: Array<{ role: string; label: string; path: string; modifiedAt?: string }>
+  counts: Record<string, number>
+} | null>(null)
+
+const readyShares = computed(() => shares.value.filter((item) => item.status === 'ready'))
+const disabledShares = computed(() =>
+  shares.value.filter((item) => item.status !== 'ready' && item.name.trim() !== ''),
+)
+
+async function refreshLinkAndShares(): Promise<void> {
+  try {
+    const status = await getDataHubLinkStatus()
+    dataHubLinked.value = status.linked
+  } catch {
+    dataHubLinked.value = false
+  }
+  if (!dataHubLinked.value) {
+    shares.value = []
+    return
+  }
+  try {
+    const data = await listLedgerShares()
+    shares.value = data.list
+  } catch (error) {
+    shares.value = []
+    if (request.isUnauthorized(error) || request.isDataHubUnauthorized(error)) {
+      dataHubLinked.value = false
+    }
+  }
+}
+
+onMounted(() => {
+  void refreshLinkAndShares()
+})
+
+async function onConnectDataHub(): Promise<void> {
+  if (linking.value) {
+    return
+  }
+  linking.value = true
+  try {
+    const { authorizeUrl } = await startDataHubLink()
+    const state = new URL(authorizeUrl).searchParams.get('state')
+    if (state) {
+      sessionStorage.setItem('ipqc_data_hub_state', state)
+    }
+    window.location.assign(authorizeUrl)
+  } finally {
+    linking.value = false
+  }
+}
+
+function formatPreviewCounts(_role: string): string {
+  if (!previewResult.value) return '—'
+  const c = previewResult.value.counts
+  return `首件 ${c.fa ?? 0} · 终检明细 ${c.fqcNg ?? 0} · 清查 ${c.fqc ?? 0} · 投诉 ${c.cmp ?? 0} · 绩效 ${c.perf ?? 0}`
+}
+
+async function onPreviewSync(): Promise<void> {
+  if (!shareId.value) return
+  previewing.value = true
+  try {
+    previewResult.value = await previewLedgerSync({
+      shareId: shareId.value,
+      rootPath: rootPath.value,
+    })
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function onConfirmSync(): Promise<void> {
+  if (!shareId.value || !previewResult.value) return
+  try {
+    await ElMessageBox.confirm(
+      '确认后将以共享盘快照覆盖本机首件、终检、投诉、点检得分与绩效；培训资料 / 记录 / 考核 / 技能矩阵保留。',
+      '写入本机台账',
+      { type: 'warning', confirmButtonText: '确认写入', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  syncing.value = true
+  try {
+    const data = await syncLedger({ shareId: shareId.value, rootPath: rootPath.value })
+    store.db = mergeLedgerSnapshot(store.db, data.snapshot)
+    if (data.checkScores) {
+      store.checkScores = mergeCheckScores(store.checkScores, data.checkScores)
+    }
+    store.persist()
+    previewResult.value = null
+    ElMessage.success('共享盘台账已写入本机')
+  } finally {
+    syncing.value = false
+  }
+}
 
 interface TableDef {
   key: string
@@ -295,6 +521,49 @@ async function onReset(): Promise<void> {
   background: #fff1f0;
   border: 1px solid #f1d5d1;
   color: #b91c1c;
+}
+.sync-block {
+  margin: 16px 0 20px;
+  padding: 14px 16px;
+  border: 1px solid #e8ecf0;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.sync-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sync-auth {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.sync-link-btn {
+  margin-top: 2px;
+}
+.sync-linked {
+  margin: 10px 0 0;
+}
+.sync-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.sync-share {
+  width: 260px;
+}
+.sync-path {
+  width: min(360px, 100%);
+  flex: 1;
+}
+.sync-hint {
+  margin: 10px 0 0;
+  padding-left: 18px;
 }
 .actions {
   display: flex;

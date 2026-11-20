@@ -3,6 +3,7 @@ import { HttpException } from '@nestjs/common'
 export const API_MSG = {
   badRequest: 'bad_request',
   unauthorized: 'unauthorized',
+  dataHubUnauthorized: 'data_hub_unauthorized',
   forbidden: 'forbidden',
   notFound: 'not_found',
   conflict: 'conflict',

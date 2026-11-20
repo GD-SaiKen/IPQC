@@ -14,12 +14,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录', public: true },
   },
   {
-    path: '/login/callback',
-    name: 'login-callback',
-    component: () => import('@/views/login/callback.vue'),
-    meta: { title: '登录', public: true },
-  },
-  {
     path: '/',
     component: () => import('@/layouts/default-layout/index.vue'),
     children: [
@@ -115,6 +109,12 @@ const routes: RouteRecordRaw[] = [
         name: 'data',
         component: () => import('@/views/data/index.vue'),
         meta: { title: '数据与设置', viewKey: 'data', workshopMode: 'any' },
+      },
+      {
+        path: 'data/data-hub/callback',
+        name: 'data-hub-callback',
+        component: () => import('@/views/data/data-hub-callback.vue'),
+        meta: { title: '连接 data-hub', viewKey: 'data', workshopMode: 'any' },
       },
     ],
   },

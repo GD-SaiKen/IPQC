@@ -82,6 +82,9 @@ client.interceptors.response.use(
       return response
     }
     if (body.code !== SUCCESS_CODE) {
+      if (body.code === 401 && options.sessionExpiredOn401 !== false && body.msg !== 'data_hub_unauthorized') {
+        notifySessionExpired()
+      }
       throw reportFailure(body.code, body.msg, body.message, options)
     }
     if (options.showSuccess) {
@@ -97,7 +100,7 @@ client.interceptors.response.use(
     }
     const body = error.response.data
     if (isEnvelope(body)) {
-      if (body.code === 401 && options.sessionExpiredOn401 !== false) {
+      if (body.code === 401 && options.sessionExpiredOn401 !== false && body.msg !== 'data_hub_unauthorized') {
         notifySessionExpired()
       }
       throw reportFailure(body.code, body.msg, body.message, options)
@@ -121,6 +124,16 @@ function mergeOptions(config?: AxiosRequestConfig): AxiosRequestConfig {
 export const request = {
   isUnauthorized(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error && (error as ApiFailure).code === 401
+  },
+  isDataHubUnauthorized(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      'msg' in error &&
+      (error as ApiFailure).code === 401 &&
+      (error as ApiFailure).msg === 'data_hub_unauthorized'
+    )
   },
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const res = await client.get<T>(url, mergeOptions(config))

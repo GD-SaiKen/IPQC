@@ -2,14 +2,19 @@ import { createHash, randomBytes } from 'node:crypto'
 
 import type { DataHubOAuthConfig } from './data-hub-config'
 
-export function createPkce(): { verifier: string; challenge: string } {
+export interface PkcePair {
+  verifier: string
+  challenge: string
+}
+
+export function createPkce(): PkcePair {
   const verifier = randomBytes(32).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
   return { verifier, challenge }
 }
 
 export function buildAuthorizeUrl(
-  config: Pick<DataHubOAuthConfig, 'authorizeOrigin' | 'clientId' | 'redirectUri' | 'resource'>,
+  config: DataHubOAuthConfig,
   input: { state: string; codeChallenge: string },
 ): string {
   const url = new URL('/oauth/authorize', config.authorizeOrigin)

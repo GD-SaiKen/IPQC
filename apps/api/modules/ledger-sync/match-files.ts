@@ -37,7 +37,7 @@ const DEPRIORITIZE_PATH_MARKERS = [
   '2025年',
 ] as const
 
-function scoreLedgerPath(path: string, preferRootPath?: string): number {
+function scoreLedgerPath(path: string, preferRootPaths?: string[]): number {
   let score = 0
   for (const marker of PREFER_PATH_MARKERS) {
     if (path.includes(marker)) {
@@ -50,23 +50,26 @@ function scoreLedgerPath(path: string, preferRootPath?: string): number {
     }
   }
   const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '')
-  const root = preferRootPath?.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') ?? ''
-  if (root && (normalized === root || normalized.startsWith(`${root}/`))) {
-    score += 120
+  for (const preferRootPath of preferRootPaths ?? []) {
+    const root = preferRootPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+    if (root && (normalized === root || normalized.startsWith(`${root}/`))) {
+      score += 120
+      break
+    }
   }
   return score
 }
 
-function pickPreferredHit(hits: SearchHit[], preferRootPath?: string): SearchHit | null {
+function pickPreferredHit(hits: SearchHit[], preferRootPaths?: string[]): SearchHit | null {
   if (hits.length <= 1) {
     return hits[0] ?? null
   }
   let best = hits[0]!
-  let bestScore = scoreLedgerPath(best.path, preferRootPath)
+  let bestScore = scoreLedgerPath(best.path, preferRootPaths)
   let tied = false
   for (let i = 1; i < hits.length; i++) {
     const hit = hits[i]!
-    const score = scoreLedgerPath(hit.path, preferRootPath)
+    const score = scoreLedgerPath(hit.path, preferRootPaths)
     if (score > bestScore) {
       best = hit
       bestScore = score
@@ -135,12 +138,12 @@ export function normalizeRootPath(rootPath: string): string {
 }
 
 export interface MatchLedgerFilesOptions {
-  /** 不限制搜索范围，仅在重名时优先该目录下的副本 */
-  preferRootPath?: string
+  /** 不限制搜索范围，仅在重名时优先所列目录下的副本 */
+  preferRootPaths?: string[]
 }
 
 export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOptions): MatchFilesResult {
-  const preferRootPath = options?.preferRootPath
+  const preferRootPaths = options?.preferRootPaths
   const byRole = new Map<LedgerRole, SearchHit[]>()
 
   for (const hit of hits) {
@@ -155,7 +158,7 @@ export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOp
   const conflicts: Array<{ role: LedgerRole; paths: string[] }> = []
   for (const [role, list] of byRole) {
     if (list.length > 1) {
-      const preferred = pickPreferredHit(list, preferRootPath)
+      const preferred = pickPreferredHit(list, preferRootPaths)
       if (preferred) {
         byRole.set(role, [preferred])
         continue
@@ -185,7 +188,7 @@ export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOp
     missing.push(role)
   }
   if (missing.length > 0) {
-    const rootHint = preferRootPath
+    const rootHint = preferRootPaths?.length
       ? `已在全共享盘搜索；若仍缺项，请确认共享盘内是否存在对应 Excel，或检查 data-hub 检索是否命中。`
       : `请确认共享盘内文件名与规格一致（如「100394-003首巡检报告.xls」「2026年注塑车间品质履历表.xlsx」）。`
     return {

@@ -42,6 +42,12 @@ export class AuthController {
     return this.auth.finishDataHubLink(user.id, dto)
   }
 
+  @Post('data-hub/link/unlink')
+  @HttpCode(200)
+  unlinkDataHubLink(@CurrentUser() user: AuthUser) {
+    return this.auth.unlinkDataHubLink(user.id)
+  }
+
   @Post('logout')
   @HttpCode(200)
   logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) response: Response) {

@@ -41,7 +41,7 @@ export function listLedgerShares(): Promise<{
 
 export function previewLedgerSync(body: {
   shareId: string
-  rootPath?: string
+  rootPaths?: string[]
 }): Promise<{ files: LedgerPreviewFile[]; counts: Record<string, number> }> {
   return request.post(`${BASE}/preview`, body, {
     requestOptions: { showSuccess: false, sessionExpiredOn401: false },
@@ -50,7 +50,7 @@ export function previewLedgerSync(body: {
 
 export function syncLedger(body: {
   shareId: string
-  rootPath?: string
+  rootPaths?: string[]
 }): Promise<{
   counts: Record<string, number>
   snapshot: LedgerSnapshot

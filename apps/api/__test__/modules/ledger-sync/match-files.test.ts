@@ -71,6 +71,20 @@ describe('matchLedgerFiles', () => {
     }
   })
 
+  it('多选偏好目录时优先落在其中的副本', () => {
+    const hits = allRequiredHits().filter((h) => h.name !== '各车间点检评分排名.xlsx')
+    hits.push(
+      { path: '归档/各车间点检评分排名.xlsx', name: '各车间点检评分排名.xlsx' },
+      { path: '台账B/各车间点检评分排名.xlsx', name: '各车间点检评分排名.xlsx' },
+    )
+    const result = matchLedgerFiles(hits, { preferRootPaths: ['台账B', '正式台账'] })
+    expect(result.kind).toBe('ok')
+    if (result.kind === 'ok') {
+      const rank = result.files.find((f) => f.role === 'checkRank')
+      expect(rank?.path).toBe('台账B/各车间点检评分排名.xlsx')
+    }
+  })
+
   it('历年副本时优先 2026 正式目录', () => {
     const hits = allRequiredHits().filter((h) => h.name !== '各车间点检评分排名.xlsx')
     hits.push(

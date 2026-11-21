@@ -1,0 +1,98 @@
+{
+  "shareId": "e9cf69da-87f4-44eb-bc00-a5032ca869d7",
+  "shareDisplayName": "品质保管部（zyoa）",
+  "hour": 6,
+  "minute": 0,
+  "selectedEntries": [
+    {
+      "path": "前制程QC/零件检验汇总/首（巡）检验报告/五金/100/100394-003.xls",
+      "kind": "file",
+      "role": "faFocus",
+      "template": "faSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/首（巡）检验汇总记录/2026年/2026年注塑首（巡）检验汇总.xlsx",
+      "kind": "file",
+      "role": "faInjection",
+      "template": "faSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/首（巡）检验汇总记录/2026年/2026年压铸首(巡)检汇总表.xlsx",
+      "kind": "file",
+      "role": "faDiecast",
+      "template": "faSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/首（巡）检验汇总记录/2026年/2026年五金首(巡)检汇总表.xlsx",
+      "kind": "file",
+      "role": "faHardware",
+      "template": "faSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年印刷车间品质履历表.xlsx",
+      "kind": "file",
+      "role": "printLedger",
+      "template": "printLedger"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年注塑车间品质履历表.xlsx",
+      "kind": "file",
+      "role": "fqcInjection",
+      "template": "fqcSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年注塑毛边品质履历表.xlsx",
+      "kind": "file",
+      "role": "fqcInjectionBur",
+      "template": "fqcSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年压铸车间品质履历表.xls",
+      "kind": "file",
+      "role": "fqcDiecast",
+      "template": "fqcSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年五金车间品质履历表.xls",
+      "kind": "file",
+      "role": "fqcHardware",
+      "template": "fqcSheet"
+    },
+    {
+      "path": "前制程QC/零件检验汇总/FQC报表/2026年FQC报表/2026年涂装车间品质履历表.xlsx",
+      "kind": "file",
+      "role": "fqcCoating",
+      "template": "fqcSheet"
+    },
+    {
+      "path": "前制程QC/零件异常跟进/零件投诉跟进/2026年/2026年不良品清查.xls",
+      "kind": "file",
+      "role": "fqcInventory",
+      "template": "inventorySheet"
+    },
+    {
+      "path": "前制程QC/零件异常跟进/零件投诉跟进/2026年/2026年前制程零件投诉跟进.xls",
+      "kind": "file",
+      "role": "complaint",
+      "template": "complaintSheet"
+    },
+    {
+      "path": "前制程QC/前制程过程管控/2026年过程管控检查/各车间点检评分排名.xlsx",
+      "kind": "file",
+      "role": "checkRank",
+      "template": "checkRankSheet"
+    },
+    {
+      "path": "前制程QC/前制程过程管控/2026年过程管控检查/注塑车间关键点管控.xlsx",
+      "kind": "file",
+      "role": "checkStandard",
+      "template": "checkStandardSheet"
+    },
+    {
+      "path": "前制程QC/绩效数据/2026年品管绩效数据/PQC员工2026年绩效.xlsx",
+      "kind": "file",
+      "role": "perf",
+      "template": "perfSheet"
+    }
+  ]
+}

@@ -73,7 +73,7 @@ export interface LedgerSelectionScope {
 
 export function countLedgerScope(body: {
   shareId: string
-  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file'; role?: string; template?: string }>
   excludedPaths?: string[]
 }): Promise<LedgerSelectionScope> {
   return request.post(`${BASE}/scope`, body, {
@@ -83,7 +83,7 @@ export function countLedgerScope(body: {
 
 export function previewLedgerSync(body: {
   shareId: string
-  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file'; role?: string; template?: string }>
   excludedPaths?: string[]
   rootPaths?: string[]
 }): Promise<{
@@ -99,7 +99,7 @@ export function previewLedgerSync(body: {
 
 export interface LedgerSyncConfig {
   shareId: string | null
-  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file'; role?: string; template?: string }>
   excludedPaths: string[]
   hour: number
   minute: number
@@ -117,7 +117,7 @@ export function fetchSyncConfig(): Promise<LedgerSyncConfig> {
 
 export function putSyncConfig(body: {
   shareId?: string | null
-  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file'; role?: string; template?: string }>
   excludedPaths: string[]
   hour: number
   minute: number

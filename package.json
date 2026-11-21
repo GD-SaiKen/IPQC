@@ -11,7 +11,9 @@
     "lint": "pnpm --filter @ipqc/web lint && pnpm --filter @ipqc/api lint",
     "extract-seed": "node scripts/extract-prototype-seed.mjs",
     "empty-seed": "node scripts/write-empty-seed.mjs",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "apply:ledger-bindings": "node scripts/apply-ledger-default-bindings.mjs",
+    "apply:ledger-bindings:force": "node scripts/apply-ledger-default-bindings.mjs --force"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

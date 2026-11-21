@@ -71,19 +71,45 @@ describe('mapWorkbooksToSnapshot', () => {
     expect(result.snapshot.fqcNg.length).toBeGreaterThan(0)
   })
 
-  it('缺列时整份失败', () => {
-    const wb = new Map([
+  it('缺列只失败该文件，其它绑定仍进入快照', () => {
+    const wb = new Map<LedgerRole, { path: string; sheets: { name: string; rows: string[][] }[] }>([
+      [
+        'checkRank',
+        {
+          path: '/各车间点检评分排名.xlsx',
+          sheets: [{ name: 'Sheet1', rows: [['项目'], ['外观']] }],
+        },
+      ],
       [
         'complaint',
         {
-          path: '/2026年前制程零件投诉跟进.xls',
-          sheets: [{ name: 'Sheet1', rows: [['来源'], ['BC']] }],
+          path: '/投诉.xls',
+          sheets: [
+            {
+              name: 'Sheet1',
+              rows: [
+                ['日期', '来源', '责任部门'],
+                ['2026-01-01', 'BC', '注塑'],
+              ],
+            },
+          ],
         },
       ],
     ])
-    const files = [file('complaint', '2026年前制程零件投诉跟进.xls')]
+    const files = [
+      file('checkRank', '各车间点检评分排名.xlsx'),
+      file('complaint', '投诉.xls'),
+    ]
     const result = mapWorkbooksToSnapshot(files, wb, [])
-    expect(result).toEqual({ kind: 'reject', message: expect.stringContaining('缺少列') })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        path: '/各车间点检评分排名.xlsx',
+        message: expect.stringContaining('缺少列'),
+      }),
+    ])
+    expect(result.snapshot.cmp.length).toBeGreaterThan(0)
   })
 
   it('投诉 CSV 单表可映射', () => {

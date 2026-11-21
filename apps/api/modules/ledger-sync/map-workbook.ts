@@ -33,6 +33,7 @@ export type MapWorkbooksResult =
       snapshot: LedgerSnapshot
       checkScores: CheckScoresPayload
       counts: Record<string, number>
+      failures: Array<{ path: string; message: string }>
     }
   | { kind: 'reject'; message: string }
 
@@ -280,13 +281,14 @@ export function mapWorkbooksToSnapshot(
 ): MapWorkbooksResult {
   const snapshot = emptySnapshot()
   const checkScores: CheckScoresPayload = {}
+  const failures: Array<{ path: string; message: string }> = []
 
-  try {
-    for (const file of files) {
-      if (missingOptional.includes(file.role)) continue
+  for (const file of files) {
+    if (missingOptional.includes(file.role)) continue
+    try {
       const wb = workbooks.get(file.role)
       if (!wb?.sheets?.length) {
-        return { kind: 'reject', message: `无法读取：${file.name}` }
+        throw new Error(`无法读取：${file.name}`)
       }
       const label = file.name
 
@@ -325,10 +327,10 @@ export function mapWorkbooksToSnapshot(
         const ws = FQC_WS[file.role as keyof typeof FQC_WS]!
         snapshot.fqcNg.push(...parseFqcNgRows(wb.sheets[0]!, ws, label))
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '表格解析失败'
+      failures.push({ path: file.path, message })
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '表格解析失败'
-    return { kind: 'reject', message }
   }
 
   if (missingOptional.includes('faInjectionBur')) {
@@ -347,5 +349,5 @@ export function mapWorkbooksToSnapshot(
     skill: 0,
   }
 
-  return { kind: 'ok', snapshot, checkScores, counts }
+  return { kind: 'ok', snapshot, checkScores, counts, failures }
 }

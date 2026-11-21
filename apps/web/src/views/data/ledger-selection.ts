@@ -23,7 +23,7 @@ export interface SavedLedgerSelection {
 }
 
 export interface SyncSelectionPayload {
-  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file'; role?: string; template?: string }>
   excludedPaths: string[]
 }
 

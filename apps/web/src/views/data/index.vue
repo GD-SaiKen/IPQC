@@ -44,34 +44,39 @@
             核对解析
           </el-button>
           <span v-if="savedSelection" class="muted small sync-preview-hint">
-            以下列已保存范围为准，与树上当前勾选无关。
+            核对只读取已保存的文件绑定，与树上尚未保存的勾选无关。
           </span>
         </div>
         <div v-if="savedSelection" class="sync-saved">
-          <h5 class="sync-subtitle">已保存的核对范围</h5>
+          <h5 class="sync-subtitle">已保存的文件绑定</h5>
           <p class="muted small">
-            共享盘：{{ savedShareLabel }} · 保存于 {{ formatSavedAt(savedSelection.savedAt) }}。
-            <template v-if="savedSelectionScopeLoading">正在统计展开后的文件数…</template>
-            <template v-else-if="savedSelectionScope">
-              已选目录 {{ savedSelectionScope.selectedDirectoryCount }} · 单独勾选文件
-              {{ savedSelectionScope.selectedFileCount }} · 排除项 {{ savedSelectionScope.excludedPathCount }}；
-              展开共 <strong>{{ savedSelectionScope.expandedTotal }}</strong> 个文件，参与核对
-              <strong>{{ savedSelectionScope.activeTotal }}</strong> 个
-              <template v-if="savedSelectionScope.excludedTotal">
-                ，已排除 {{ savedSelectionScope.excludedTotal }} 个
-              </template>
-              。
-            </template>
-            <template v-else-if="savedSelectionScopeError">{{ savedSelectionScopeError }}</template>
+            共享盘：{{ savedShareLabel }} · 保存于 {{ formatSavedAt(savedSelection.savedAt) }} ·
+            已绑定 {{ savedSelection.payload.selectedEntries.length }} 个文件。同步只打开这些路径。
           </p>
           <div class="sync-saved-table">
-            <LedgerHierarchyTable :rows="savedSelectionRows" mode="selection" />
+            <table class="sync-runs-table">
+              <thead>
+                <tr>
+                  <th>角色</th>
+                  <th>列模板</th>
+                  <th>路径</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in savedSelection.payload.selectedEntries" :key="row.path">
+                  <td>{{ roleLabel(row.role || '') }}</td>
+                  <td>{{ templateLabelForRole(row.role || '') }}</td>
+                  <td>{{ row.path }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
         <div v-else-if="dataHubLinked" class="sync-saved sync-saved--empty">
-          <p class="muted small">尚未保存核对范围。请在下方选择共享盘并勾选目录/文件，再点「保存选择」。</p>
+          <p class="muted small">尚未保存文件绑定。请勾选单个文件、指定角色后再点「保存选择」。</p>
+          <p v-if="legacyBindingNotice" class="muted small">此前按目录保存的范围已停用，请按文件重新绑定。</p>
         </div>
-        <h5 class="sync-subtitle">调整文件范围（可选）</h5>
+        <h5 class="sync-subtitle">指定台账文件</h5>
         <div class="sync-form sync-form--edit">
           <el-select
             v-model="shareId"
@@ -109,14 +114,46 @@
             :key="shareId"
             lazy
             show-checkbox
+            check-strictly
             node-key="path"
             :props="treeProps"
             :load="loadTreeNode"
             @check="onTreeCheck"
           />
           <p class="muted small sync-selection-hint">
-            树上草稿：已选目录 {{ selectedDirectories.length }} · 已选文件 {{ selectedFiles.length }} · 已排除 {{ excludedPaths.length }}
+            只勾选文件。勾选目录不会绑定，也不会按文件名识别。
           </p>
+          <table v-if="selectedFiles.length" class="sync-runs-table">
+            <thead>
+              <tr>
+                <th>文件</th>
+                <th>角色</th>
+                <th>列模板</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="path in selectedFiles" :key="path">
+                <td>{{ path }}</td>
+                <td>
+                  <el-select
+                    :model-value="fileRoles[path] || ''"
+                    placeholder="选择角色"
+                    style="width: 180px"
+                    @update:model-value="setFileRole(path, String($event))"
+                  >
+                    <el-option
+                      v-for="item in LEDGER_ROLE_OPTIONS"
+                      :key="item.role"
+                      :label="item.label"
+                      :value="item.role"
+                    />
+                  </el-select>
+                </td>
+                <td>{{ templateLabelForRole(fileRoles[path] || '') }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="bindingDraftError" class="muted small">{{ bindingDraftError }}</p>
         </div>
         <ul v-if="disabledShares.length" class="sync-hint muted small">
           <li v-for="item in disabledShares" :key="item.id">
@@ -200,13 +237,14 @@
         </div>
         <div v-if="previewResult" class="sync-preview sync-preview--crud">
           <p v-if="previewResult.summary" class="muted small">
-            选中 {{ previewResult.summary.total }} 个文件，已解析 {{ previewResult.summary.parsed }} 个，未解析 {{ previewResult.summary.unparsed }} 个
+            已绑定 {{ previewResult.summary.total }} 个，已解析 {{ previewResult.summary.parsed }} 个，解析失败
+            {{ previewResult.files.filter((file) => file.status === 'invalid').length }} 个
           </p>
           <p
             v-if="previewResult.issues.some((issue) => issue.type === 'missing_role')"
             class="muted small sync-selection-hint"
           >
-            核对范围内缺少部分台账文件时，仍可同步已解析的文件；缺项仅作提示。
+            未绑定的角色只作提示，不删除服务器上已有的行；列对不上的文件不入库。
           </p>
           <ul v-if="previewResult.issues.length" class="sync-issues">
             <li v-for="(issue, index) in previewResult.issues" :key="`${issue.type}-${index}`">{{ issue.message }}</li>
@@ -284,7 +322,6 @@ import type { TreeInstance } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDataHubLinkStatus, startDataHubLink, unlinkDataHubLink } from '@/api/auth'
 import {
-  countLedgerScope,
   listLedgerShares,
   listShareDirectories,
   fetchSyncConfig,
@@ -293,7 +330,6 @@ import {
   listLedgerSyncRunDiffs,
   listLedgerSyncRuns,
   runLedgerSync,
-  type LedgerSelectionScope,
   type LedgerSyncRunListItem,
   type LedgerShareItem,
   type PreviewIssue,
@@ -301,23 +337,22 @@ import {
   type PreviewSummary,
 } from '@/api/ledger-sync'
 import {
-  buildSavedSelectionRows,
-  buildSyncSelection,
+  bindingSaveError,
+  isCompleteBindingSelection,
+  LEDGER_ROLE_OPTIONS,
+  roleLabel,
+  templateIdForRole,
+  templateLabelForRole,
+} from '@/views/data/ledger-bindings'
+import {
   canConfirmSync,
   explainSyncDisabled,
-  canPreviewSelection,
-  directoryFullyExcluded,
-  filterRedundantFilesUnderDirectories,
   isSameSelection,
-  isUnderPath,
-  normalizeSyncSelection,
-  splitSelectionPayload,
   type PreviewFilter,
   type SavedLedgerSelection,
   type SyncSelectionPayload,
 } from '@/views/data/ledger-selection'
 import { request } from '@/utils/request'
-import LedgerHierarchyTable from '@/components/ledger-hierarchy-table/ledger-hierarchy-table.vue'
 import LedgerSyncPreview from '@/components/ledger-sync-preview/ledger-sync-preview.vue'
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
@@ -336,11 +371,10 @@ const treeRef = ref<TreeInstance>()
 const selectedDirectories = ref<string[]>([])
 const selectedFiles = ref<string[]>([])
 const excludedPaths = ref<string[]>([])
+const fileRoles = ref<Record<string, string>>({})
+const legacyBindingNotice = ref(false)
 const previewFilter = ref<PreviewFilter>('all')
 const savedSelection = ref<SavedLedgerSelection | null>(null)
-const savedSelectionScope = ref<LedgerSelectionScope | null>(null)
-const savedSelectionScopeLoading = ref(false)
-const savedSelectionScopeError = ref('')
 const pendingTreeRestore = ref<SyncSelectionPayload | null>(null)
 const restoringTree = ref(false)
 const syncHour = ref(6)
@@ -365,10 +399,20 @@ const syncDiffs = ref<
 const diffLoading = ref(false)
 
 function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
-  const split = splitSelectionPayload(payload)
-  selectedDirectories.value = split.directories
-  selectedFiles.value = split.files
-  excludedPaths.value = split.excludedPaths
+  selectedDirectories.value = []
+  excludedPaths.value = []
+  selectedFiles.value = payload.selectedEntries.filter((item) => item.kind === 'file').map((item) => item.path)
+  const roles: Record<string, string> = {}
+  for (const entry of payload.selectedEntries) {
+    if (entry.kind === 'file' && entry.role) {
+      roles[entry.path] = entry.role
+    }
+  }
+  fileRoles.value = roles
+}
+
+function setFileRole(path: string, role: string): void {
+  fileRoles.value = { ...fileRoles.value, [path]: role }
 }
 
 function restoreTreeSelection(): void {
@@ -394,27 +438,6 @@ function restoreTreeSelection(): void {
   }
 }
 
-async function refreshSavedSelectionScope(): Promise<void> {
-  savedSelectionScopeError.value = ''
-  if (!savedSelection.value) {
-    savedSelectionScope.value = null
-    return
-  }
-  savedSelectionScopeLoading.value = true
-  try {
-    savedSelectionScope.value = await countLedgerScope({
-      shareId: savedSelection.value.shareId,
-      selectedEntries: savedSelection.value.payload.selectedEntries,
-      excludedPaths: savedSelection.value.payload.excludedPaths,
-    })
-  } catch {
-    savedSelectionScope.value = null
-    savedSelectionScopeError.value = '展开文件数统计失败，请稍后重试或先核对解析。'
-  } finally {
-    savedSelectionScopeLoading.value = false
-  }
-}
-
 watch(shareId, async (next) => {
   const draft =
     next && savedSelection.value?.shareId === next ? savedSelection.value.payload : null
@@ -425,6 +448,7 @@ watch(shareId, async (next) => {
     selectedDirectories.value = []
     selectedFiles.value = []
     excludedPaths.value = []
+    fileRoles.value = {}
   }
   await nextTick()
   await nextTick()
@@ -448,22 +472,18 @@ interface TreeNodeData {
   leaf: boolean
 }
 
-const syncPayload = computed(() => {
-  const directories = selectedDirectories.value.filter(
-    (dir) => !directoryFullyExcluded(dir, excludedPaths.value, selectedFiles.value),
-  )
-  return buildSyncSelection({
-    directories,
-    files: filterRedundantFilesUnderDirectories(
-      selectedFiles.value,
-      directories,
-      excludedPaths.value,
-    ),
-    excludedPaths: excludedPaths.value,
-  })
-})
+const syncPayload = computed<SyncSelectionPayload>(() => ({
+  selectedEntries: selectedFiles.value.map((path) => {
+    const role = fileRoles.value[path]
+    return role
+      ? { path, kind: 'file' as const, role, template: templateIdForRole(role) }
+      : { path, kind: 'file' as const }
+  }),
+  excludedPaths: [],
+}))
 
-const canSaveSelection = computed(() => canPreviewSelection(syncPayload.value))
+const bindingDraftError = computed(() => bindingSaveError(selectedFiles.value, fileRoles.value))
+const canSaveSelection = computed(() => bindingDraftError.value === '')
 const selectionDirty = computed(() => {
   if (restoringTree.value || !savedSelection.value) {
     return false
@@ -477,7 +497,7 @@ const canRunPreview = computed(() => {
   if (!dataHubLinked.value || !savedSelection.value) {
     return false
   }
-  if (!canPreviewSelection(savedSelection.value.payload)) {
+  if (!isCompleteBindingSelection(savedSelection.value.payload.selectedEntries)) {
     return false
   }
   return readyShares.value.some((item) => item.id === savedSelection.value!.shareId)
@@ -490,10 +510,6 @@ const savedShareLabel = computed(() => {
   const match = shares.value.find((item) => item.id === id)
   return match ? `${match.name}（${match.status}）` : id
 })
-const savedSelectionRows = computed(() =>
-  savedSelection.value ? buildSavedSelectionRows(savedSelection.value.payload) : [],
-)
-
 async function loadTreeNode(
   node: { level: number; data: TreeNodeData },
   resolve: (data: TreeNodeData[]) => void,
@@ -526,29 +542,25 @@ async function loadTreeNode(
   restoreTreeSelection()
 }
 
-function onTreeCheck(
-  data: TreeNodeData,
-  state: { checkedKeys: string[]; halfCheckedKeys: string[] },
-): void {
+function onTreeCheck(data: TreeNodeData): void {
   if (restoringTree.value) {
+    return
+  }
+  if (data.kind === 'directory') {
+    treeRef.value?.setChecked(data.path, false, false)
+    ElMessage.warning('请勾选单个文件并指定角色，目录不会自动识别')
     return
   }
   pendingTreeRestore.value = null
   const nodes = (treeRef.value?.getCheckedNodes(false, false) as TreeNodeData[] | undefined) ?? []
-  selectedDirectories.value = nodes.filter((item) => item.kind === 'directory').map((item) => item.path)
+  selectedDirectories.value = []
   selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
-
-  if (data.kind === 'file' && !state.checkedKeys.includes(data.path)) {
-    if (selectedDirectories.value.some((dir) => isUnderPath(data.path, dir))) {
-      excludedPaths.value = [...new Set([...excludedPaths.value, data.path])]
-    }
+  const keep = new Set(selectedFiles.value)
+  const next: Record<string, string> = {}
+  for (const [path, role] of Object.entries(fileRoles.value)) {
+    if (keep.has(path)) next[path] = role
   }
-  if (data.kind === 'file' && state.checkedKeys.includes(data.path)) {
-    excludedPaths.value = excludedPaths.value.filter((path) => path !== data.path)
-  }
-  if (data.kind === 'directory' && !state.checkedKeys.includes(data.path)) {
-    excludedPaths.value = excludedPaths.value.filter((path) => !isUnderPath(path, data.path))
-  }
+  fileRoles.value = next
 }
 const previewing = ref(false)
 const syncing = ref(false)
@@ -587,15 +599,16 @@ async function hydrateSavedSelection(): Promise<void> {
     syncHour.value = cfg.hour
     syncMinute.value = cfg.minute
     savedSelection.value = null
-    if (
-      cfg.shareId &&
-      Array.isArray(cfg.selectedEntries) &&
-      cfg.selectedEntries.length > 0
-    ) {
-      const payload = normalizeSyncSelection({
+    legacyBindingNotice.value = false
+    if (cfg.shareId && Array.isArray(cfg.selectedEntries) && cfg.selectedEntries.length > 0) {
+      if (!isCompleteBindingSelection(cfg.selectedEntries)) {
+        legacyBindingNotice.value = true
+        return
+      }
+      const payload: SyncSelectionPayload = {
         selectedEntries: cfg.selectedEntries,
-        excludedPaths: cfg.excludedPaths ?? [],
-      })
+        excludedPaths: [],
+      }
       savedSelection.value = {
         shareId: cfg.shareId,
         payload,
@@ -604,7 +617,6 @@ async function hydrateSavedSelection(): Promise<void> {
       if (!shareId.value) {
         shareId.value = cfg.shareId
       }
-      await refreshSavedSelectionScope()
     }
   } catch {
     savedSelection.value = null
@@ -687,10 +699,10 @@ async function onUnlinkDataHub(): Promise<void> {
     selectedDirectories.value = []
     selectedFiles.value = []
     excludedPaths.value = []
+    fileRoles.value = {}
     previewResult.value = null
     savedSelection.value = null
-    savedSelectionScope.value = null
-    savedSelectionScopeError.value = ''
+    legacyBindingNotice.value = false
     ElMessage.success('已解除 data-hub 连接')
   } finally {
     unlinking.value = false
@@ -710,25 +722,25 @@ async function onSaveSelection(): Promise<void> {
     const cfg = await putSyncConfig({
       shareId: shareId.value,
       selectedEntries: syncPayload.value.selectedEntries,
-      excludedPaths: syncPayload.value.excludedPaths,
+      excludedPaths: [],
       hour: syncHour.value,
       minute: syncMinute.value,
     })
-    const payload = normalizeSyncSelection({
+    const payload: SyncSelectionPayload = {
       selectedEntries: cfg.selectedEntries,
-      excludedPaths: cfg.excludedPaths ?? [],
-    })
+      excludedPaths: [],
+    }
     savedSelection.value = {
       shareId: shareId.value,
       payload,
       savedAt: cfg.updatedAt ?? new Date().toISOString(),
     }
+    legacyBindingNotice.value = false
     pendingTreeRestore.value = { ...payload }
     previewResult.value = null
     await nextTick()
     restoreTreeSelection()
-    await refreshSavedSelectionScope()
-    ElMessage.success('已保存核对范围（全厂生效）')
+    ElMessage.success('已保存文件绑定（全厂生效）')
   } finally {
     savingSelection.value = false
   }

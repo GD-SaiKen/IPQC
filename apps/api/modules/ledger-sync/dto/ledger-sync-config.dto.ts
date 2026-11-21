@@ -12,12 +12,22 @@ import {
   ValidateNested,
 } from 'class-validator'
 
+import { LEDGER_ROLES, LEDGER_TEMPLATES } from '../ledger-roles'
+
 class SelectedEntryDto {
   @IsString()
   path!: string
 
   @IsIn(['directory', 'file'])
   kind!: 'directory' | 'file'
+
+  @IsOptional()
+  @IsIn(LEDGER_ROLES)
+  role?: (typeof LEDGER_ROLES)[number]
+
+  @IsOptional()
+  @IsIn(LEDGER_TEMPLATES)
+  template?: (typeof LEDGER_TEMPLATES)[number]
 }
 
 export class PutLedgerSyncConfigDto {

@@ -7,6 +7,7 @@ import { apiError, API_MSG, RuntimeConfigService } from '../../common'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import type { AuthUser } from '../auth/auth.types'
+import { parseLedgerBindings } from './ledger-bindings'
 import { LEDGER_ROLE_LABELS } from './ledger-roles'
 import {
   DataHubRequestError,
@@ -21,12 +22,12 @@ import type { LedgerSyncBodyDto } from './dto/ledger-sync-body.dto'
 import type { LedgerSharesQueryDto } from './dto/ledger-shares-query.dto'
 import {
   basename,
-  buildLedgerFileRecords,
   comparePreviewFiles,
   hasBlockingIssues,
   markParsedFiles,
   summarizeLedgerFiles,
   type LedgerFileRecord,
+  type LedgerIssue,
 } from './ledger-sync-files'
 import { matchLedgerFiles, normalizeRootPath, validateRootPath } from './match-files'
 import type { MatchedFile } from './match-files'
@@ -118,55 +119,45 @@ export class LedgerSyncService {
 
   async scope(user: AuthUser, body: LedgerSyncBodyDto) {
     if (!this.usesNewSelection(body)) {
-      throw apiError(400, '请选择要核对的目录或文件', 'bad_request')
+      throw apiError(400, '请勾选单个文件并指定台账角色', 'bad_request')
     }
     this.assertNewSelectionBody(body)
-    const accessToken = await this.auth.getDataHubAccessToken(user.id)
-    await this.resolveReadyShare(user, body.shareId, accessToken)
-    const { all, active, excluded } = await this.resolveSelectionCandidates(body, accessToken)
-    const directories = (body.selectedEntries ?? []).filter((entry) => entry.kind === 'directory').length
-    const pinnedFiles = (body.selectedEntries ?? []).filter((entry) => entry.kind === 'file').length
+    const parsed = parseLedgerBindings(body.selectedEntries ?? [])
+    const invalid = parsed.issues.find((issue) => issue.type === 'invalid')
+    if (invalid) {
+      throw apiError(400, invalid.message, 'bad_request')
+    }
+    void user
     return {
-      expandedTotal: all.length,
-      activeTotal: active.length,
-      excludedTotal: excluded.length,
-      selectedDirectoryCount: directories,
-      selectedFileCount: pinnedFiles,
-      excludedPathCount: body.excludedPaths?.length ?? 0,
+      expandedTotal: parsed.bindings.length,
+      activeTotal: parsed.bindings.length,
+      excludedTotal: 0,
+      selectedDirectoryCount: 0,
+      selectedFileCount: parsed.bindings.length,
+      excludedPathCount: 0,
     }
   }
 
   async preview(user: AuthUser, body: LedgerSyncBodyDto) {
-    if (this.usesNewSelection(body)) {
-      this.assertNewSelectionBody(body)
-      return this.previewSelected(user, body)
-    }
     if (this.usesLegacySelection(body)) {
-      const mapped = await this.resolveFilesLegacy(user, body)
-      const mapResult = await this.loadAndMapLegacy(user, body.shareId, mapped, false)
-      return {
-        files: mapResult.files,
-        counts: mapResult.counts,
-      }
+      throw apiError(400, '请改为单个文件绑定，不再按目录或文件名识别', 'bad_request')
     }
-    throw apiError(400, '请选择要核对的目录或文件', 'bad_request')
+    if (!this.usesNewSelection(body)) {
+      throw apiError(400, '请勾选单个文件并指定台账角色', 'bad_request')
+    }
+    this.assertNewSelectionBody(body)
+    return this.previewSelected(user, body)
   }
 
   async sync(user: AuthUser, body: LedgerSyncBodyDto) {
-    if (this.usesNewSelection(body)) {
-      this.assertNewSelectionBody(body)
-      return this.syncSelected(user, body)
-    }
     if (this.usesLegacySelection(body)) {
-      const mapped = await this.resolveFilesLegacy(user, body)
-      const mapResult = await this.loadAndMapLegacy(user, body.shareId, mapped, true)
-      return {
-        counts: mapResult.counts,
-        snapshot: mapResult.snapshot,
-        checkScores: mapResult.checkScores,
-      }
+      throw apiError(400, '请改为单个文件绑定，不再按目录或文件名识别', 'bad_request')
     }
-    throw apiError(400, '请选择要核对的目录或文件', 'bad_request')
+    if (!this.usesNewSelection(body)) {
+      throw apiError(400, '请勾选单个文件并指定台账角色', 'bad_request')
+    }
+    this.assertNewSelectionBody(body)
+    return this.syncSelected(user, body)
   }
 
   private usesNewSelection(body: LedgerSyncBodyDto): boolean {
@@ -254,8 +245,62 @@ export class LedgerSyncService {
     includeSnapshot: boolean,
   ) {
     void user
-    const { active, excluded } = await this.resolveSelectionCandidates(body, accessToken)
-    let { files, analysis, issues } = buildLedgerFileRecords({ active, excluded })
+    const parsed = parseLedgerBindings(body.selectedEntries ?? [])
+    const invalid = parsed.issues.find((issue) => issue.type === 'invalid')
+    if (invalid) {
+      throw apiError(400, invalid.message, 'bad_request')
+    }
+
+    let files: LedgerFileRecord[] = []
+    let issues: LedgerIssue[] = parsed.issues.map((issue) => ({
+      type: issue.type,
+      message: issue.message,
+      role: issue.role,
+      paths: issue.paths,
+    }))
+    for (const role of parsed.missingRoles) {
+      issues.push({
+        type: 'missing_role',
+        role,
+        message: `尚未绑定：${LEDGER_ROLE_LABELS[role]}（缺项不阻止同步）`,
+        paths: undefined,
+      })
+    }
+    for (const issue of parsed.issues.filter((item) => item.type === 'duplicate')) {
+      for (const path of issue.paths ?? []) {
+        files.push({
+          path,
+          name: basename(path),
+          extension: '',
+          role: issue.role,
+          label: issue.role ? LEDGER_ROLE_LABELS[issue.role] : undefined,
+          status: 'duplicate',
+          reason: issue.message,
+        })
+      }
+    }
+    for (const binding of parsed.bindings) {
+      files.push({
+        path: binding.path,
+        name: binding.name,
+        extension: binding.name.split('.').pop()?.toLowerCase() ?? '',
+        role: binding.role,
+        label: LEDGER_ROLE_LABELS[binding.role],
+        status: 'parsed',
+      })
+    }
+
+    const analysis = {
+      files: parsed.bindings.map((binding) => ({
+        role: binding.role,
+        path: binding.path,
+        name: binding.name,
+      })),
+      duplicates: parsed.issues
+        .filter((issue) => issue.type === 'duplicate' && issue.role && issue.paths)
+        .map((issue) => ({ role: issue.role!, paths: issue.paths! })),
+      missingOptional: [] as LedgerRole[],
+    }
 
     let counts: Record<string, number> | undefined
     let snapshot: ReturnType<typeof mapWorkbooksToSnapshot> extends infer Result
@@ -289,18 +334,19 @@ export class LedgerSyncService {
             type: 'column_mismatch',
             message: mapResult.message,
           })
-          const failedPaths = new Set(
-            mappableFiles.filter((file) => mapResult.message.includes(file.name)).map((f) => f.path),
-          )
-          if (failedPaths.size === 0 && mappableFiles.length === 1) {
-            failedPaths.add(mappableFiles[0]!.path)
-          }
-          files = files.map((file) =>
-            failedPaths.has(file.path)
-              ? { ...file, status: 'invalid', reason: mapResult.message }
-              : file,
-          )
         } else {
+          for (const failure of mapResult.failures) {
+            issues.push({
+              type: 'column_mismatch',
+              message: failure.message,
+              paths: [failure.path],
+            })
+            files = files.map((file) =>
+              file.path === failure.path
+                ? { ...file, status: 'invalid', reason: failure.message }
+                : file,
+            )
+          }
           counts = mapResult.counts
           if (includeSnapshot) {
             snapshot = mapResult.snapshot
@@ -567,6 +613,23 @@ export class LedgerSyncService {
     if (!link.linked) {
       throw apiError(400, '请先连接 data-hub', API_MSG.badRequest)
     }
+    const parsed = parseLedgerBindings(dto.selectedEntries)
+    const invalid = parsed.issues.find((issue) => issue.type === 'invalid')
+    if (invalid) {
+      throw apiError(400, invalid.message, API_MSG.badRequest)
+    }
+    if (parsed.issues.some((issue) => issue.type === 'duplicate')) {
+      throw apiError(400, parsed.issues.find((issue) => issue.type === 'duplicate')!.message, API_MSG.badRequest)
+    }
+    if (parsed.bindings.length === 0) {
+      throw apiError(400, '请勾选单个文件并指定台账角色', API_MSG.badRequest)
+    }
+    const storedEntries = parsed.bindings.map((binding) => ({
+      path: binding.path,
+      kind: 'file' as const,
+      role: binding.role,
+      template: binding.template,
+    }))
     const prev = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
     const nextVersion = (prev?.configVersion ?? 0) + 1
     const row = await this.prisma.ledgerSyncConfig.upsert({
@@ -574,8 +637,8 @@ export class LedgerSyncService {
       create: {
         id: CONFIG_ID,
         shareId: dto.shareId ?? null,
-        selectedEntries: dto.selectedEntries as unknown as Prisma.InputJsonValue,
-        excludedPaths: dto.excludedPaths as unknown as Prisma.InputJsonValue,
+        selectedEntries: storedEntries as unknown as Prisma.InputJsonValue,
+        excludedPaths: [] as unknown as Prisma.InputJsonValue,
         hour: dto.hour,
         minute: dto.minute,
         savedByUserId: user.id,
@@ -583,7 +646,7 @@ export class LedgerSyncService {
       },
       update: {
         shareId: dto.shareId ?? null,
-        selectedEntries: dto.selectedEntries as unknown as Prisma.InputJsonValue,
+        selectedEntries: storedEntries as unknown as Prisma.InputJsonValue,
         excludedPaths: dto.excludedPaths as unknown as Prisma.InputJsonValue,
         hour: dto.hour,
         minute: dto.minute,

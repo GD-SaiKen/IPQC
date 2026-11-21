@@ -40,3 +40,46 @@ export const LEDGER_ROLE_LABELS: Record<LedgerRole, string> = {
   checkStandard: '点检标准',
   perf: '绩效',
 }
+
+export const LEDGER_TEMPLATES = [
+  'faSheet',
+  'printLedger',
+  'fqcSheet',
+  'inventorySheet',
+  'complaintSheet',
+  'checkRankSheet',
+  'checkStandardSheet',
+  'perfSheet',
+] as const
+
+export type LedgerTemplate = (typeof LEDGER_TEMPLATES)[number]
+
+export const LEDGER_TEMPLATE_LABELS: Record<LedgerTemplate, string> = {
+  faSheet: '首件表',
+  printLedger: '印刷履历',
+  fqcSheet: '终检表',
+  inventorySheet: '清查表',
+  complaintSheet: '投诉表',
+  checkRankSheet: '点检得分表',
+  checkStandardSheet: '点检标准表',
+  perfSheet: '绩效表',
+}
+
+export const TEMPLATE_BY_ROLE: Record<LedgerRole, LedgerTemplate> = {
+  faFocus: 'faSheet',
+  faInjection: 'faSheet',
+  faInjectionBur: 'faSheet',
+  faDiecast: 'faSheet',
+  faHardware: 'faSheet',
+  printLedger: 'printLedger',
+  fqcInjection: 'fqcSheet',
+  fqcInjectionBur: 'fqcSheet',
+  fqcDiecast: 'fqcSheet',
+  fqcHardware: 'fqcSheet',
+  fqcCoating: 'fqcSheet',
+  fqcInventory: 'inventorySheet',
+  complaint: 'complaintSheet',
+  checkRank: 'checkRankSheet',
+  checkStandard: 'checkStandardSheet',
+  perf: 'perfSheet',
+}

@@ -1,5 +1,13 @@
 <template>
   <div class="page-scroll">
+    <el-alert
+      v-if="rowMissing"
+      title="该行已删除"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+    />
     <div class="fqc-head">
       <div>
         <h2>{{ key === '全部' ? '全厂终检 FQC' : `${key} · 终检 FQC` }}</h2>
@@ -121,6 +129,7 @@
         file-base="终检不良明细"
         :rows="ngRows"
         :columns="ngColumns"
+        :row-class="rowFocusClass"
         :page-size="15"
         placeholder="搜索日期 / 料号 / 批次 / 不良 / 检验员"
         show-add
@@ -139,6 +148,7 @@
         file-base="终检不良清查"
         :rows="clearRows"
         :columns="clearColumns"
+        :row-class="rowFocusClass"
         :page-size="12"
         placeholder="搜索日期 / 料号 / 品名 / 不良 / 涉及车间"
         show-add
@@ -159,6 +169,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
+import type { LedgerApiTable } from '@/composables/ledger-table-key'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcComboChart from '@/components/ipqc-chart/ipqc-combo-chart.vue'
 import IpqcParetoChart from '@/components/ipqc-chart/ipqc-pareto-chart.vue'
@@ -182,6 +195,12 @@ import { WORKSHOPS } from '@/domain/ipqc/workshops'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
+const route = useRoute()
+const { rowMissing, rowFocusClass } = useLedgerRowFocus(() => {
+  const t = route.query.table
+  if (t === 'fqc' || t === 'fqcNg') return t as LedgerApiTable
+  return 'fqcNg'
+})
 const key = computed(() => store.workshop)
 const keys = computed(() => fqcKeysOf(key.value))
 const book = computed(() => aggFqc(keys.value))

@@ -1,5 +1,13 @@
 <template>
   <div class="page-scroll">
+    <el-alert
+      v-if="rowMissing"
+      title="该行已删除"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+    />
     <div class="trn-head">
       <h2>{{ key === '全部' ? '全厂' : key }} · 培训与技能</h2>
       <span class="muted small">资料库 → 实施记录 → 考核 → 技能矩阵；「通用」资料在各车间可见。</span>
@@ -57,6 +65,7 @@
           file-base="培训资料"
           :rows="materials"
           :columns="matColumns"
+          :row-class="rowFocusClass"
           :page-size="10"
           placeholder="搜索资料名 / 类型 / 版本 / 车间"
           show-add
@@ -76,6 +85,7 @@
           file-base="培训实施"
           :rows="records"
           :columns="trnColumns"
+          :row-class="rowFocusClass"
           :page-size="10"
           placeholder="搜索日期 / 主题 / 讲师 / 方式"
           show-add
@@ -94,6 +104,7 @@
           file-base="培训考核"
           :rows="exams"
           :columns="examColumns"
+          :row-class="rowFocusClass"
           :page-size="10"
           placeholder="搜索日期 / 姓名 / 科目"
           show-add
@@ -151,7 +162,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
+import type { LedgerApiTable } from '@/composables/ledger-table-key'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
 import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
@@ -181,6 +195,31 @@ import { useIpqcStore } from '@/stores/ipqc'
 const store = useIpqcStore()
 const key = computed(() => store.workshop)
 const tab = ref('mat')
+const route = useRoute()
+
+const TAB_TO_API: Record<string, LedgerApiTable> = {
+  mat: 'mat',
+  trn: 'trn',
+  exam: 'exam',
+  skill: 'skill',
+}
+
+const { rowMissing, rowFocusClass } = useLedgerRowFocus(() => {
+  const q = route.query.table
+  if (typeof q === 'string' && q in TAB_TO_API) return TAB_TO_API[q]
+  return TAB_TO_API[tab.value] ?? 'mat'
+})
+
+watch(
+  () => route.query.table,
+  (table) => {
+    if (typeof table === 'string' && table in TAB_TO_API) {
+      const k = Object.entries(TAB_TO_API).find(([, api]) => api === table)?.[0]
+      if (k) tab.value = k
+    }
+  },
+  { immediate: true },
+)
 
 const matList = computed(() =>
   (store.db.mat as unknown as TrainingMaterial[]).filter((m) =>

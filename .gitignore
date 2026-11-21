@@ -14,3 +14,6 @@ __pycache__/
 !.env.example
 
 .cursor/
+
+# Word 编辑锁文件
+~$*.docx

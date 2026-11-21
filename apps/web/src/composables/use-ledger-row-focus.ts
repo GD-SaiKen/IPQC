@@ -28,7 +28,7 @@ export function useLedgerRowFocus(table: LedgerApiTable | (() => LedgerApiTable)
   }
 
   watch(
-    () => route.query.rowId,
+    () => [route.query.rowId, route.query.table] as const,
     () => {
       void resolveRowId()
     },

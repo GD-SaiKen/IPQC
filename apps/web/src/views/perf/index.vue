@@ -1,5 +1,13 @@
 <template>
   <div class="page-scroll">
+    <el-alert
+      v-if="rowMissing"
+      title="该行已删除"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+    />
     <div class="perf-head">
       <h2>{{ key === '全部' ? '全厂' : key }} · 工作绩效</h2>
       <span class="muted small">
@@ -116,6 +124,7 @@
         file-base="绩效加减分"
         :rows="detail"
         :columns="columns"
+        :row-class="rowFocusClass"
         :page-size="15"
         placeholder="搜索日期 / 姓名 / 维度 / 事项"
         show-add
@@ -153,6 +162,7 @@ import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcHbar from '@/components/ipqc-chart/ipqc-hbar.vue'
 import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
 import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
 import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import { fp, shortDept } from '@/domain/ipqc/format'
 import {
@@ -167,6 +177,7 @@ import { WORKSHOPS } from '@/domain/ipqc/workshops'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
+const { rowMissing, rowFocusClass } = useLedgerRowFocus('perf')
 const key = computed(() => store.workshop)
 const isAll = computed(() => key.value === '全部')
 

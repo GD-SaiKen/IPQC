@@ -1,5 +1,13 @@
 <template>
   <div class="page-scroll">
+    <el-alert
+      v-if="recordMissing"
+      title="该记录已删除"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+    />
     <div class="chk-head">
       <h2>关键点检排名</h2>
       <span class="muted small">
@@ -143,6 +151,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useCheckScoreFocus } from '@/composables/use-check-score-focus'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcLineChart from '@/components/ipqc-chart/ipqc-line-chart.vue'
 import IpqcSparkline from '@/components/ipqc-chart/ipqc-sparkline.vue'
@@ -183,6 +192,9 @@ const passEx = computed(
 const activeZone = ref<WorkshopKey>(
   store.workshop === '全部' ? '注塑' : (store.workshop as WorkshopKey)
 )
+const { recordMissing } = useCheckScoreFocus((ws) => {
+  activeZone.value = ws
+})
 watch(
   () => store.workshop,
   (ws) => {

@@ -22,13 +22,15 @@
     </div>
 
     <VGrid
-      v-show="false"
-      aria-hidden="true"
-      class="et-revo-mount"
-      :columns="revoMountColumns"
-      :source="revoMountSource"
+      v-if="useRevoBody"
+      class="et-revo-grid"
+      :columns="gridColumns"
+      :source="pageRows"
+      theme="compact"
+      resize
+      @afteredit="onRevoAfterEdit"
     />
-    <div class="et-scroll">
+    <div v-else class="et-scroll">
       <table class="et-table" :style="{ minWidth: `${minWidth}px` }">
         <thead>
           <tr>
@@ -166,8 +168,44 @@ const savedAt = ref('')
 const drafts = reactive<Record<string, string>>({})
 const history = useEditHistory(props.tableId)
 
-const revoMountColumns: ColumnRegular[] = [{ prop: '_', name: '_', size: 1, readonly: true }]
-const revoMountSource = [{ _: '' }]
+const useRevoBody = computed(
+  () => !props.columns.some((col) => col.format) && !props.showDelete,
+)
+
+const gridColumns = computed<ColumnRegular[]>(() =>
+  props.columns.map((col) => ({
+    prop: col.key,
+    name: col.label,
+    size: col.width ?? 90,
+    readonly: !!(col.readOnly || col.format),
+  })),
+)
+
+async function onRevoAfterEdit(event: CustomEvent): Promise<void> {
+  const detail = event.detail as { prop?: string; model?: Row; val?: unknown; data?: Row }
+  const row = detail.model ?? detail.data
+  const prop = detail.prop
+  if (!row || !prop) return
+  const col = props.columns.find((item) => item.key === prop)
+  if (!col || col.readOnly || col.format) return
+  const before = row[prop]
+  const value = normalize(col, String(detail.val ?? before ?? ''))
+  if (String(value ?? '') === String(before ?? '')) return
+  const apiTable = ledgerApiTableFromId(props.tableId)
+  if (apiTable) {
+    try {
+      await persistLedgerCell(apiTable, row, col.key, value, before)
+    } catch {
+      row[prop] = before
+      return
+    }
+  } else {
+    row[prop] = value
+  }
+  history.push({ row, key: col.key, before, after: value, label: col.label })
+  markSaved()
+  emit('change', row, col.key, value)
+}
 
 const ids = new WeakMap<object, number>()
 let nextId = 1
@@ -361,7 +399,7 @@ function onKeydown(ev: KeyboardEvent, ri: number, ci: number): void {
   }
 }
 
-function onPaste(ev: ClipboardEvent, ri: number, ci: number): void {
+async function onPaste(ev: ClipboardEvent, ri: number, ci: number): Promise<void> {
   const raw = (ev.clipboardData?.getData('text/plain') || '').replace(/\r/g, '')
   if (!raw || !/[\t\n]/.test(raw)) return
   ev.preventDefault()
@@ -369,22 +407,31 @@ function onPaste(ev: ClipboardEvent, ri: number, ci: number): void {
   while (lines.length && lines[lines.length - 1] === '') lines.pop()
   const grid = lines.map((l) => l.split('\t'))
   const cols = props.columns
+  const apiTable = ledgerApiTableFromId(props.tableId)
   let count = 0
-  grid.forEach((line, dri) => {
+  for (const [dri, line] of grid.entries()) {
     const row = pageRows.value[ri + dri]
-    if (!row) return
-    line.forEach((text, dci) => {
+    if (!row) continue
+    for (const [dci, text] of line.entries()) {
       const col = cols[ci + dci]
-      if (!col || col.readOnly || col.format) return
+      if (!col || col.readOnly || col.format) continue
       const value = normalize(col, text)
-      if (col.type === 'select' && !(col.options || []).includes(String(value))) return
+      if (col.type === 'select' && !(col.options || []).includes(String(value))) continue
       const before = row[col.key]
-      if (String(value) === String(before ?? '')) return
-      row[col.key] = value
+      if (String(value) === String(before ?? '')) continue
+      if (apiTable) {
+        try {
+          await persistLedgerCell(apiTable, row, col.key, value, before)
+        } catch {
+          continue
+        }
+      } else {
+        row[col.key] = value
+      }
       history.push({ row, key: col.key, before, after: value, label: col.label })
       count++
-    })
-  })
+    }
+  }
   if (!count) {
     ElMessage.warning('粘贴内容与本表字段不匹配')
     return
@@ -393,7 +440,7 @@ function onPaste(ev: ClipboardEvent, ri: number, ci: number): void {
   markSaved()
   emit('bulk-change')
   ElMessage.success(
-    `已填入 ${grid.length} 行 × ${Math.max(...grid.map((l) => l.length))} 列`
+    `已填入 ${grid.length} 行 × ${Math.max(...grid.map((l) => l.length))} 列`,
   )
 }
 
@@ -548,11 +595,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
 .et-table tr.et-row--focus td {
   background: #e8f0fe;
 }
-.et-revo-mount {
-  height: 0;
-  overflow: hidden;
-  position: absolute;
-  width: 0;
+.et-revo-grid {
+  height: 520px;
+  width: 100%;
 }
 .et-table tr.row-ng td {
   background: #fff5f5;

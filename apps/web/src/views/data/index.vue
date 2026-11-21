@@ -66,7 +66,9 @@
             </template>
             <template v-else-if="savedSelectionScopeError">{{ savedSelectionScopeError }}</template>
           </p>
-          <LedgerHierarchyTable :rows="savedSelectionRows" mode="selection" />
+          <div class="sync-saved-table">
+            <LedgerHierarchyTable :rows="savedSelectionRows" mode="selection" />
+          </div>
         </div>
         <div v-else-if="dataHubLinked" class="sync-saved sync-saved--empty">
           <p class="muted small">尚未保存核对范围。请在下方选择共享盘并勾选目录/文件，再点「保存选择」。</p>
@@ -111,20 +113,17 @@
             {{ item.name }}：{{ item.status }}，请先在 data-hub 完成绑定与凭据
           </li>
         </ul>
-        <div v-if="previewResult" class="sync-preview">
+        <div v-if="previewResult" class="sync-preview sync-preview--crud">
           <p v-if="previewResult.summary" class="muted small">
             选中 {{ previewResult.summary.total }} 个文件，已解析 {{ previewResult.summary.parsed }} 个，未解析 {{ previewResult.summary.unparsed }} 个
           </p>
           <ul v-if="previewResult.issues.length" class="sync-issues">
             <li v-for="(issue, index) in previewResult.issues" :key="`${issue.type}-${index}`">{{ issue.message }}</li>
           </ul>
-          <el-radio-group v-model="previewFilter" size="small" class="sync-filter">
-            <el-radio-button value="all">全部文件</el-radio-button>
-            <el-radio-button value="parsed">将写入本机</el-radio-button>
-            <el-radio-button value="unparsed">未解析</el-radio-button>
-            <el-radio-button value="problem">存在问题</el-radio-button>
-          </el-radio-group>
-          <LedgerHierarchyTable :rows="previewHierarchyRows" mode="preview" />
+          <LedgerSyncPreview
+            v-model:filter="previewFilter"
+            :files="previewResult.files"
+          />
           <div class="actions" style="margin-top: 12px">
             <el-button
               type="primary"
@@ -205,14 +204,12 @@ import {
   type PreviewSummary,
 } from '@/api/ledger-sync'
 import {
-  buildPreviewHierarchyRows,
   buildSavedSelectionRows,
   buildSyncSelection,
   canConfirmSync,
   canPreviewSelection,
   directoryFullyExcluded,
   filterRedundantFilesUnderDirectories,
-  filterPreviewFiles,
   isSameSelection,
   isUnderPath,
   latestSavedLedgerSelection,
@@ -225,6 +222,7 @@ import {
 } from '@/views/data/ledger-selection'
 import { request } from '@/utils/request'
 import LedgerHierarchyTable from '@/components/ledger-hierarchy-table/ledger-hierarchy-table.vue'
+import LedgerSyncPreview from '@/components/ledger-sync-preview/ledger-sync-preview.vue'
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
@@ -444,15 +442,6 @@ const previewResult = ref<{
   issues: PreviewIssue[]
   counts?: Record<string, number>
 } | null>(null)
-
-const filteredPreviewFiles = computed(() => {
-  if (!previewResult.value) {
-    return []
-  }
-  return filterPreviewFiles(previewResult.value.files, previewFilter.value)
-})
-
-const previewHierarchyRows = computed(() => buildPreviewHierarchyRows(filteredPreviewFiles.value))
 
 const canConfirmPreview = computed(() => {
   if (!previewResult.value) {
@@ -920,8 +909,15 @@ async function onFile(ev: Event): Promise<void> {
   color: #b45309;
   font-size: 12px;
 }
-.sync-filter {
-  margin: 10px 0;
+.sync-preview--crud {
+  margin-top: 10px;
+}
+.sync-saved-table {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 8px;
+  background: #fff;
 }
 .sync-hint {
   margin: 10px 0 0;

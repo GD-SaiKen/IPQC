@@ -163,12 +163,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
 import type { LedgerApiTable } from '@/composables/ledger-table-key'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
 import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { patchLedgerRow } from '@/api/ledger'
 import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import { fp } from '@/domain/ipqc/format'
 import {
@@ -312,10 +314,23 @@ const examColumns: EditColumn[] = [
   { key: 'level', label: '等级', width: 76, type: 'select', options: ['A', 'B', 'C'] },
 ]
 
-function cycleSkill(row: SkillRow, idx: number): void {
-  const lv = row.lv || (row.lv = [])
+async function cycleSkill(row: SkillRow, idx: number): Promise<void> {
+  const id = String((row as SkillRow & { id?: string }).id ?? '')
+  if (!id) {
+    ElMessage.error('缺少行 id，无法保存')
+    return
+  }
+  const lv = [...(row.lv || [])]
+  const before = lv.map((n) => n)
+  while (lv.length <= idx) lv.push(0)
   lv[idx] = nextSkillLevel(lv[idx] || 0)
-  store.persist()
+  row.lv = lv
+  try {
+    await patchLedgerRow('skill', id, { lv })
+    store.persist()
+  } catch {
+    row.lv = before
+  }
 }
 function levelText(lv: number): string {
   const found = SKILL_LEVELS.find(([n]) => n === lv)

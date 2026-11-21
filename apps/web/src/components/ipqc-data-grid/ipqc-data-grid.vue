@@ -17,85 +17,28 @@
       <button type="button" class="et-btn" :disabled="!history.canUndo.value" @click="undoEdit">
         ↶ 撤销
       </button>
+      <button
+        v-if="showDelete"
+        type="button"
+        class="et-btn"
+        :disabled="!selectedRow"
+        @click="deleteSelected"
+      >
+        删除选中行
+      </button>
       <button v-if="showAdd" type="button" class="et-btn" @click="emit('add')">+ 新增行</button>
       <button type="button" class="et-btn" @click="exportCsv">导出 CSV</button>
     </div>
 
     <VGrid
-      v-if="useRevoBody"
       class="et-revo-grid"
       :columns="gridColumns"
       :source="pageRows"
       theme="compact"
       resize
       @afteredit="onRevoAfterEdit"
+      @beforecellfocus="onBeforeCellFocus"
     />
-    <div v-else class="et-scroll">
-      <table class="et-table" :style="{ minWidth: `${minWidth}px` }">
-        <thead>
-          <tr>
-            <th
-              v-for="col in columns"
-              :key="col.key"
-              :style="{ minWidth: `${col.width || 90}px` }"
-            >{{ col.label }}</th>
-            <th v-if="showDelete" class="et-del-col" />
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(row, ri) in pageRows"
-            :key="rowId(row)"
-            :class="rowClass ? rowClass(row) : undefined"
-          >
-            <td
-              v-for="(col, ci) in columns"
-              :key="`${rowId(row)}-${col.key}`"
-              :class="{ 'et-num': col.type === 'num' }"
-            >
-              <span
-                v-if="col.readOnly || col.format"
-                class="et-render"
-                :class="col.tone ? `et-badge et-badge--${col.tone(row)}` : ''"
-              >{{ display(row, col) }}</span>
-              <select
-                v-else-if="col.type === 'select'"
-                :data-cell="`${ri}-${ci}`"
-                :value="String(row[col.key] ?? '')"
-                class="et-select"
-                @focus="activate"
-                @change="onSelect(row, col, $event)"
-                @keydown="onKeydown($event, ri, ci)"
-              >
-                <option v-for="op in col.options || []" :key="op" :value="op">{{ op }}</option>
-              </select>
-              <input
-                v-else
-                :data-cell="`${ri}-${ci}`"
-                class="et-input"
-                :inputmode="col.type === 'num' ? 'decimal' : undefined"
-                :value="draftValue(row, col)"
-                @focus="beginEdit(row, col)"
-                @input="onInput(row, col, $event)"
-                @compositionstart="composing = true"
-                @compositionend="onCompositionEnd(row, col, $event)"
-                @blur="commitCell(row, col)"
-                @keydown="onKeydown($event, ri, ci)"
-                @paste="onPaste($event, ri, ci)"
-              />
-            </td>
-            <td v-if="showDelete" class="et-del-col">
-              <button type="button" class="et-del" title="删除本行" @click="confirmDelete(row)">×</button>
-            </td>
-          </tr>
-          <tr v-if="!pageRows.length">
-            <td :colspan="columns.length + (showDelete ? 1 : 0)" class="et-empty">
-              没有符合条件的数据
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
     <div class="et-pager">
       <span>第 {{ page + 1 }} / {{ pages }} 页</span>
@@ -107,14 +50,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import VGrid from '@revolist/vue3-datagrid'
-import type { ColumnRegular } from '@revolist/revogrid'
+import VGrid, { useTemplates } from '@revolist/vue3-datagrid'
+import type { CellProps, ColumnRegular } from '@revolist/revogrid'
 import { ledgerApiTableFromId } from '@/composables/ledger-table-key'
-import { persistLedgerCell, persistLedgerUndo } from '@/composables/use-ipqc-ledger-save'
+import {
+  commitGridCell,
+  normalizeGridCell,
+} from '@/composables/use-ipqc-grid-cell-commit'
+import { persistLedgerUndo } from '@/composables/use-ipqc-ledger-save'
 import { useEditHistory } from '@/composables/use-edit-history'
 import { downloadCsv } from '@/composables/use-table-export'
+
+import { setGridSaveContext } from './grid-save-context'
+import {
+  IpqcGridDeleteCell,
+  IpqcGridFormatCell,
+  IpqcGridSelectCell,
+} from './ipqc-grid-cells'
 
 type Row = Record<string, unknown>
 
@@ -163,55 +117,115 @@ let activeTable = ''
 const root = ref<HTMLElement | null>(null)
 const query = ref('')
 const page = ref(0)
-const composing = ref(false)
 const savedAt = ref('')
-const drafts = reactive<Record<string, string>>({})
+const selectedRow = ref<Row | null>(null)
 const history = useEditHistory(props.tableId)
+const templates = useTemplates()
 
-const useRevoBody = computed(
-  () => !props.columns.some((col) => col.format) && !props.showDelete,
-)
+function rowCellProps(model: Row): CellProps | undefined {
+  const cls = props.rowClass?.(model)
+  return cls ? { class: cls } : undefined
+}
 
-const gridColumns = computed<ColumnRegular[]>(() =>
-  props.columns.map((col) => ({
-    prop: col.key,
-    name: col.label,
-    size: col.width ?? 90,
-    readonly: !!(col.readOnly || col.format),
-  })),
-)
+const gridColumns = computed<ColumnRegular[]>(() => {
+  const cols: ColumnRegular[] = props.columns.map((col) => {
+    const base: ColumnRegular = {
+      prop: col.key,
+      name: col.label,
+      size: col.width ?? 90,
+      cellProperties: (ctx) => rowCellProps(ctx.model as Row),
+    }
+    if (col.format) {
+      return {
+        ...base,
+        readonly: true,
+        cellTemplate: templates.template(IpqcGridFormatCell, {
+          props: (ctx) => ({
+            text: col.format!(ctx.model as Row),
+            tone: col.tone?.(ctx.model as Row) || '',
+          }),
+          key: (ctx) => `${String((ctx.model as Row).id ?? ctx.rowIndex)}-${col.key}`,
+        }),
+      }
+    }
+    if (col.readOnly) {
+      return { ...base, readonly: true }
+    }
+    if (col.type === 'select') {
+      return {
+        ...base,
+        readonly: true,
+        cellTemplate: templates.template(IpqcGridSelectCell, {
+          props: (ctx) => ({
+            row: ctx.model as Row,
+            colKey: col.key,
+            label: col.label,
+            options: col.options || [],
+          }),
+          key: (ctx) => `${String((ctx.model as Row).id ?? ctx.rowIndex)}-${col.key}`,
+        }),
+      }
+    }
+    return base
+  })
+  if (props.showDelete) {
+    cols.push({
+      prop: '__del',
+      name: '删',
+      size: 44,
+      readonly: true,
+      cellTemplate: templates.template(IpqcGridDeleteCell, {
+        props: (ctx) => ({ row: ctx.model as Row }),
+        key: (ctx) => String((ctx.model as Row).id ?? ctx.rowIndex),
+      }),
+    })
+  }
+  return cols
+})
+
+function bindSaveContext(): void {
+  setGridSaveContext({
+    tableId: props.tableId,
+    history,
+    markSaved,
+    onChange: (row, key, value) => emit('change', row, key, value),
+    onDelete: (row) => void confirmDelete(row),
+    ledgerTable: () => ledgerApiTableFromId(props.tableId),
+  })
+}
+
+function onBeforeCellFocus(event: CustomEvent): void {
+  activeTable = props.tableId
+  bindSaveContext()
+  const detail = event.detail as { model?: Row }
+  selectedRow.value = detail.model ?? null
+}
 
 async function onRevoAfterEdit(event: CustomEvent): Promise<void> {
+  activeTable = props.tableId
   const detail = event.detail as { prop?: string; model?: Row; val?: unknown; data?: Row }
   const row = detail.model ?? detail.data
   const prop = detail.prop
-  if (!row || !prop) return
+  if (!row || !prop || prop === '__del') return
   const col = props.columns.find((item) => item.key === prop)
-  if (!col || col.readOnly || col.format) return
+  if (!col || col.readOnly || col.format || col.type === 'select') return
   const before = row[prop]
-  const value = normalize(col, String(detail.val ?? before ?? ''))
-  if (String(value ?? '') === String(before ?? '')) return
+  const value = normalizeGridCell(col, String(detail.val ?? before ?? ''))
   const apiTable = ledgerApiTableFromId(props.tableId)
-  if (apiTable) {
-    try {
-      await persistLedgerCell(apiTable, row, col.key, value, before)
-    } catch {
-      row[prop] = before
-      return
-    }
-  } else {
-    row[prop] = value
+  const ok = await commitGridCell({
+    row,
+    col,
+    value,
+    before,
+    apiTable,
+    history,
+    onSaved: markSaved,
+  })
+  if (!ok) {
+    row[prop] = before
+    return
   }
-  history.push({ row, key: col.key, before, after: value, label: col.label })
-  markSaved()
   emit('change', row, col.key, value)
-}
-
-const ids = new WeakMap<object, number>()
-let nextId = 1
-function rowId(row: Row): number {
-  if (!ids.has(row)) ids.set(row, nextId++)
-  return ids.get(row) as number
 }
 
 const filteredRows = computed(() => {
@@ -229,219 +243,20 @@ const pages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / p
 const pageRows = computed(() =>
   filteredRows.value.slice(page.value * props.pageSize, (page.value + 1) * props.pageSize)
 )
-const minWidth = computed(() => props.columns.reduce((a, c) => a + (c.width || 90), 0) + 28)
-
 watch(pages, (n) => {
   if (page.value > n - 1) page.value = n - 1
 })
 
-function draftKey(row: Row, col: EditColumn): string {
-  return `${rowId(row)}:${col.key}`
-}
-function draftValue(row: Row, col: EditColumn): string {
-  const k = draftKey(row, col)
-  return k in drafts ? drafts[k] : String(row[col.key] ?? '')
-}
-function display(row: Row, col: EditColumn): string {
-  if (col.format) return col.format(row)
-  const v = row[col.key]
-  return v == null || v === '' ? '—' : String(v)
-}
-function beginEdit(row: Row, col: EditColumn): void {
-  activeTable = props.tableId
-  const k = draftKey(row, col)
-  if (!(k in drafts)) drafts[k] = String(row[col.key] ?? '')
-}
-function onInput(row: Row, col: EditColumn, ev: Event): void {
-  drafts[draftKey(row, col)] = (ev.target as HTMLInputElement).value
-}
-function onCompositionEnd(row: Row, col: EditColumn, ev: Event): void {
-  composing.value = false
-  onInput(row, col, ev)
-}
-
-function normalize(col: EditColumn, raw: string): unknown {
-  const text = raw.trim()
-  if (col.type === 'num') {
-    if (text === '') return ''
-    const n = Number(text)
-    return Number.isFinite(n) ? n : text
-  }
-  return text
-}
-
-async function commitCell(row: Row, col: EditColumn, raw?: string): Promise<void> {
-  if (col.readOnly || col.format || col.type === 'select') return
-  const k = draftKey(row, col)
-  const before = row[col.key]
-  const text = raw != null ? raw : k in drafts ? drafts[k] : String(before ?? '')
-  const value = normalize(col, text)
-  delete drafts[k]
-  if (String(value ?? '') === String(before ?? '')) return
-  const apiTable = ledgerApiTableFromId(props.tableId)
-  if (apiTable) {
-    try {
-      await persistLedgerCell(apiTable, row, col.key, value, before)
-    } catch {
-      return
-    }
-  } else {
-    row[col.key] = value
-  }
-  history.push({ row, key: col.key, before, after: value, label: col.label })
-  markSaved()
-  emit('change', row, col.key, value)
-}
-
-async function onSelect(row: Row, col: EditColumn, ev: Event): Promise<void> {
-  activeTable = props.tableId
-  const before = row[col.key]
-  const value = (ev.target as HTMLSelectElement).value
-  if (String(value) === String(before ?? '')) return
-  const apiTable = ledgerApiTableFromId(props.tableId)
-  if (apiTable) {
-    try {
-      await persistLedgerCell(apiTable, row, col.key, value, before)
-    } catch {
-      ;(ev.target as HTMLSelectElement).value = String(before ?? '')
-      return
-    }
-  } else {
-    row[col.key] = value
-  }
-  history.push({ row, key: col.key, before, after: value, label: col.label })
-  markSaved()
-  emit('change', row, col.key, value)
-}
+watch(
+  () => props.rows,
+  () => {
+    history.clear()
+    selectedRow.value = null
+  },
+)
 
 function markSaved(): void {
   savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-}
-
-function activate(): void {
-  activeTable = props.tableId
-}
-
-function focusCell(ri: number, ci: number): void {
-  const el = root.value?.querySelector<HTMLElement>(`[data-cell="${ri}-${ci}"]`)
-  if (!el) return false as unknown as void
-  el.focus()
-  if (el instanceof HTMLInputElement) {
-    const len = el.value.length
-    el.setSelectionRange(len, len)
-  }
-}
-function nextRowCell(ri: number, ci: number): [number, number] | null {
-  const col = props.columns[ci]
-  if (!col || col.readOnly || col.format) return null
-  return ri + 1 < pageRows.value.length ? [ri + 1, ci] : null
-}
-
-function nextCell(ri: number, ci: number, dir: number): [number, number] | null {
-  const cols = props.columns
-  let r = ri
-  let c = ci + dir
-  if (c >= cols.length) {
-    r += 1
-    c = 0
-  } else if (c < 0) {
-    r -= 1
-    c = cols.length - 1
-  }
-  while (r >= 0 && r < pageRows.value.length) {
-    const col = cols[c]
-    if (col && !col.readOnly && !col.format) return [r, c]
-    c += dir
-    if (c >= cols.length) {
-      r += 1
-      c = 0
-    } else if (c < 0) {
-      r -= 1
-      c = cols.length - 1
-    }
-    if (r < 0 || r >= pageRows.value.length) break
-  }
-  return null
-}
-
-function onKeydown(ev: KeyboardEvent, ri: number, ci: number): void {
-  if (ev.isComposing || composing.value) return
-  if (ev.key === 'Escape') {
-    const row = pageRows.value[ri]
-    const col = props.columns[ci]
-    if (row && col) delete drafts[draftKey(row, col)]
-    ;(ev.target as HTMLElement).blur()
-    return
-  }
-  if (ev.key === 'Enter') {
-    ev.preventDefault()
-    const row = pageRows.value[ri]
-    const col = props.columns[ci]
-    if (row && col && col.type !== 'select') {
-      commitCell(row, col, (ev.target as HTMLInputElement).value)
-    }
-    const next = nextRowCell(ri, ci)
-    if (next) void nextTick(() => focusCell(next[0], next[1]))
-    else (ev.target as HTMLElement).blur()
-    return
-  }
-  if (ev.key === 'Tab') {
-    const next = nextCell(ri, ci, ev.shiftKey ? -1 : 1)
-    if (!next) return
-    ev.preventDefault()
-    const row = pageRows.value[ri]
-    const col = props.columns[ci]
-    if (row && col && col.type !== 'select') {
-      commitCell(row, col, (ev.target as HTMLInputElement).value)
-    }
-    const [r, c] = next
-    void nextTick(() => focusCell(r, c))
-  }
-}
-
-async function onPaste(ev: ClipboardEvent, ri: number, ci: number): Promise<void> {
-  const raw = (ev.clipboardData?.getData('text/plain') || '').replace(/\r/g, '')
-  if (!raw || !/[\t\n]/.test(raw)) return
-  ev.preventDefault()
-  const lines = raw.split('\n')
-  while (lines.length && lines[lines.length - 1] === '') lines.pop()
-  const grid = lines.map((l) => l.split('\t'))
-  const cols = props.columns
-  const apiTable = ledgerApiTableFromId(props.tableId)
-  let count = 0
-  for (const [dri, line] of grid.entries()) {
-    const row = pageRows.value[ri + dri]
-    if (!row) continue
-    for (const [dci, text] of line.entries()) {
-      const col = cols[ci + dci]
-      if (!col || col.readOnly || col.format) continue
-      const value = normalize(col, text)
-      if (col.type === 'select' && !(col.options || []).includes(String(value))) continue
-      const before = row[col.key]
-      if (String(value) === String(before ?? '')) continue
-      if (apiTable) {
-        try {
-          await persistLedgerCell(apiTable, row, col.key, value, before)
-        } catch {
-          continue
-        }
-      } else {
-        row[col.key] = value
-      }
-      history.push({ row, key: col.key, before, after: value, label: col.label })
-      count++
-    }
-  }
-  if (!count) {
-    ElMessage.warning('粘贴内容与本表字段不匹配')
-    return
-  }
-  Object.keys(drafts).forEach((k) => delete drafts[k])
-  markSaved()
-  emit('bulk-change')
-  ElMessage.success(
-    `已填入 ${grid.length} 行 × ${Math.max(...grid.map((l) => l.length))} 列`,
-  )
 }
 
 async function undoEdit(): Promise<void> {
@@ -457,10 +272,14 @@ async function undoEdit(): Promise<void> {
   }
   const entry = history.undo()
   if (!entry) return
-  delete drafts[`${rowId(entry.row)}:${entry.key}`]
   markSaved()
   emit('change', entry.row, entry.key, entry.before)
   ElMessage.success(`已撤销「${entry.label}」→ ${entry.before === '' ? '空' : entry.before}`)
+}
+
+async function deleteSelected(): Promise<void> {
+  if (!selectedRow.value) return
+  await confirmDelete(selectedRow.value)
 }
 
 async function confirmDelete(row: Row): Promise<void> {
@@ -496,8 +315,14 @@ function onGlobalKeydown(ev: KeyboardEvent): void {
   undoEdit()
 }
 
-onMounted(() => window.addEventListener('keydown', onGlobalKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
+  bindSaveContext()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
+  setGridSaveContext(null)
+})
 </script>
 
 <style scoped>
@@ -598,6 +423,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
 .et-revo-grid {
   height: 520px;
   width: 100%;
+}
+.et-revo-grid :deep(select.et-select) {
+  width: 100%;
+  min-width: 60px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  color: #1f2733;
+  cursor: pointer;
+}
+.et-revo-grid :deep(select.et-select:hover) {
+  border-color: #dbe3ee;
+}
+.et-revo-grid :deep(select.et-select:focus) {
+  outline: none;
+  border-color: #3b6fe0;
+  background: #fff;
 }
 .et-table tr.row-ng td {
   background: #fff5f5;

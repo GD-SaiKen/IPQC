@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { createDefaultDb, getCheckScores } from '@/domain/ipqc/seed'
 import { inMonth, shortDept, sum } from '@/domain/ipqc/format'
 import { wsKpi } from '@/domain/ipqc/kpi'
 import {
@@ -8,11 +7,41 @@ import {
   visibleMaterial,
   visibleRecord,
 } from '@/domain/ipqc/training'
-import type { TrainingExam, TrainingRecord } from '@/domain/ipqc/types'
+import type { IpqcDb, TrainingExam, TrainingRecord } from '@/domain/ipqc/types'
+
+const sampleDb: IpqcDb = {
+  fa: [],
+  fqc: [],
+  fqcNg: [],
+  cmp: [],
+  perf: [],
+  mat: [],
+  exam: [],
+  skill: [],
+  trn: [
+    {
+      date: '2026-03-10',
+      dept: '通用',
+      t: '安全培训',
+      num: 20,
+    } as TrainingRecord,
+    {
+      date: '2026-03-12',
+      dept: '注塑',
+      t: '外观限度样',
+      num: 8,
+    } as TrainingRecord,
+    {
+      date: '2026-03-15',
+      dept: '压铸',
+      t: '气孔判定',
+      num: 6,
+    } as TrainingRecord,
+  ],
+}
 
 describe('training · 通用记录', () => {
-  const db = createDefaultDb()
-  const records = db.trn as unknown as TrainingRecord[]
+  const records = sampleDb.trn as unknown as TrainingRecord[]
 
   it('通用资料、实施记录与考核在各车间可见，他车间专用记录不可见', () => {
     expect(visibleMaterial({ dept: '通用' }, '注塑')).toBe(true)
@@ -34,7 +63,7 @@ describe('training · 通用记录', () => {
   })
 
   it('车间 KPI 培训人次纳入通用记录', () => {
-    const scores = getCheckScores()
+    const scores = {}
     const general = records.filter(
       (r) => r.dept === '通用' && inMonth(r.date, 3)
     )
@@ -42,7 +71,7 @@ describe('training · 通用记录', () => {
       (r) => shortDept(r.dept) === '注塑' && inMonth(r.date, 3)
     )
     expect(general.length).toBeGreaterThan(0)
-    const k = wsKpi(db, scores, '注塑', 3)
+    const k = wsKpi(sampleDb, scores, '注塑', 3)
     expect(k.trnN).toBe(own.length + general.length)
     expect(k.trnP).toBe(
       sum([...own, ...general], (r) => Number(r.num) || 0)

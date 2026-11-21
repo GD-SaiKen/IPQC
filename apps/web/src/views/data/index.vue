@@ -8,11 +8,10 @@
       <div class="actions no-print">
         <el-button type="primary" @click="onExport">导出 JSON 备份</el-button>
         <el-button @click="pickFile">导入 JSON</el-button>
-        <el-button type="danger" plain @click="onReset">恢复原始种子</el-button>
         <input ref="fileRef" type="file" accept=".json" hidden @change="onFile" />
       </div>
       <p class="muted small">
-        最近保存：{{ store.lastSavedAt || '尚未保存' }} · 导入会覆盖全库，恢复种子会清除本机全部编辑。
+        最近保存：{{ store.lastSavedAt || '尚未保存' }} · 导入会覆盖全库。
       </p>
 
       <div class="sync-block no-print">
@@ -814,24 +813,6 @@ async function onFile(ev: Event): Promise<void> {
   input.value = ''
 }
 
-async function onReset(): Promise<void> {
-  try {
-    await ElMessageBox.confirm(
-      '将清除本机所有编辑并恢复种子数据。建议先导出 JSON 备份，是否继续？',
-      '恢复原始种子',
-      { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
-    )
-    await ElMessageBox.confirm(
-      '再次确认：本机编辑会被清掉且无法撤销。',
-      '二次确认',
-      { type: 'error', confirmButtonText: '确认清除', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
-  }
-  store.restoreSeed()
-  ElMessage.success('已恢复原始种子数据')
-}
 </script>
 
 <style scoped>

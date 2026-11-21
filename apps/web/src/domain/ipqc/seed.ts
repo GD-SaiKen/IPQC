@@ -1,13 +1,10 @@
-import { FA_ACTIONS, FA_ITEM_POOL, FA_ROSTER } from './build-fa-helpers'
 import realJson from '@/fixtures/raw/real.json'
 import skillMatrixJson from '@/fixtures/raw/skill-matrix.json'
 import trainingExamsJson from '@/fixtures/raw/training-exams.json'
 import trainingMaterialsJson from '@/fixtures/raw/training-materials.json'
 import trainingRecordsJson from '@/fixtures/raw/training-records.json'
-import { FA_STAGES } from './fa-rules'
 import { allFqcRows } from './fqc'
 import type { CheckScores, FaRecord, IpqcDb } from './types'
-import { WS_MAP } from './workshops'
 
 const REAL = realJson as {
   complaints: Record<string, unknown>[]
@@ -15,18 +12,6 @@ const REAL = realJson as {
   finalInsp?: Record<string, unknown>[]
   perfRecords?: Record<string, unknown>[]
   checkScores: CheckScores
-}
-
-const ROSTER = FA_ROSTER
-const ITEM_POOL = FA_ITEM_POOL
-const ACTIONS = [...FA_ACTIONS]
-
-function seed(n: number) {
-  let s = n * 9301 + 49297
-  return () => {
-    s = (s * 9301 + 49297) % 233280
-    return s / 233280
-  }
 }
 
 function buildFa(): FaRecord[] {
@@ -58,7 +43,7 @@ function buildFa(): FaRecord[] {
         spec: row.spec,
         n: 0,
         ng: 0,
-        who: row.who || '赵红梅',
+        who: row.who || '',
       }
     }
     rg[k].n++
@@ -86,53 +71,10 @@ function buildFa(): FaRecord[] {
         action: ng
           ? `尺寸复测并与工程确认公差（${b.ng} 项超差）`
           : '首件OK，正常生产',
-        eng: '覃宇翔',
+        eng: '',
         src: '实测',
       })
     })
-
-  const pool = REAL.complaints || []
-  pool.forEach((c, i) => {
-    const row = c as Record<string, string>
-    if (!row.pn && !row.part) return
-    let dept = row.dept === '注塑毛边' ? '注塑' : row.dept
-    if (!WS_MAP[dept]) dept = '五金'
-    const rnd = seed(i + 7)
-    const items = ITEM_POOL[dept]
-    if (!items?.length) return
-    const it = items[Math.floor(rnd() * items.length)]
-    const ng = rnd() < 0.28
-    const stage = FA_STAGES[i % 3]
-    const d = row.date || '2026-06-01'
-    const roster = ROSTER[dept]
-    const who = roster?.[Math.floor(rnd() * roster.length)] || '检验员'
-    const outlier = rnd() < 0.14
-    const fb = ng ? (outlier ? 7 + Math.round(rnd() * 6) : 2 + Math.round(rnd() * 3)) : ''
-    const iv = ng
-      ? outlier
-        ? (Number(fb) || 0) + 14 + Math.round(rnd() * 12)
-        : (Number(fb) || 0) + 3 + Math.round(rnd() * 7)
-      : ''
-    const st = !ng ? '已放行' : Number(iv) > 15 ? (rnd() < 0.5 ? '整改中' : '待介入') : '已关闭'
-    out.push({
-      date: d,
-      stage,
-      dept,
-      pn: row.pn || '—',
-      part: row.part || '—',
-      item: it[0],
-      spec: it[1],
-      meas: ng ? '超差 / 不符' : '合格',
-      result: ng ? 'NG' : 'OK',
-      who,
-      fb,
-      iv,
-      status: st,
-      action: ng ? (row.perm || ACTIONS[i % ACTIONS.length]) : '首件OK，正常生产',
-      eng: WS_MAP[dept]?.ce || '',
-      src: '案例',
-    })
-  })
   return out
 }
 

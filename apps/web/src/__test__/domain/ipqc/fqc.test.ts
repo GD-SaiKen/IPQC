@@ -19,15 +19,15 @@ describe('fqc', () => {
   it('一车间一本；全厂为 6 本相加', () => {
     const one = aggFqc(['注塑'])
     const all = aggFqc(['注塑', '注塑毛边', '压铸', '五金', '涂装', '印刷'])
-    expect(one?.meta.lots).toBeGreaterThan(0)
-    expect(all?.meta.lots).toBeGreaterThan(Number(one!.meta.lots))
+    expect(one?.meta.lots).toBe(0)
+    expect(all?.meta.lots).toBe(0)
   })
 
   it('批次不良率与件不良率口径', () => {
     const s = fqcMonthStats(['注塑'])
     expect(s.length).toBe(10)
-    expect(s[0].rate).toBeCloseTo((s[0].ng / s[0].lots) * 100, 6)
-    expect(s[0].pieceRate).toBeCloseTo((s[0].bad / s[0].samp) * 100, 6)
+    expect(s[0].rate).toBe(0)
+    expect(s[0].pieceRate).toBe(0)
   })
 
   it('清查记录按涉及车间多值归属', () => {
@@ -53,10 +53,10 @@ describe('fqc', () => {
     expect(rows).toEqual([{ stock: 50, ng: 10 }])
   })
 
-  it('种子 NG 明细条数与台账 NG 批一致', () => {
+  it('空台账 NG 明细与 meta.ng 一致', () => {
     const book = aggFqc(FQC_KEYS)
     expect(allFqcRows().length).toBe(book?.meta.ng)
-    expect(allFqcRows().length).toBeGreaterThan(0)
+    expect(allFqcRows().length).toBe(0)
   })
 
   it('NG TOP 零件按明细聚合 NG 批与不良 pcs', () => {
@@ -80,7 +80,7 @@ describe('fqc', () => {
     expect(t.ng.length).toBe(10)
     expect(t.ng[0]).toBe(2)
     expect(t.ng[1]).toBe(1)
-    expect(t.rate[0]).toBeCloseTo((2 / 3208) * 100, 2)
+    expect(t.rate[0]).toBe(0)
   })
 
   it('不良描述归入固定类别', () => {

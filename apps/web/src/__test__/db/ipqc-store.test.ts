@@ -5,6 +5,7 @@ import { createDefaultDb } from '@/domain/ipqc/seed'
 describe('ipqc-store · 备份导入', () => {
   it('完整备份原样导入，不重建种子行', () => {
     const db = createDefaultDb()
+    db.fqcNg.push({ lot: 'L1', bad: 1 } as (typeof db.fqcNg)[number])
     const first = db.fqcNg[0] as Record<string, unknown>
     first.lot = 999
     first.bad = 888
@@ -16,6 +17,7 @@ describe('ipqc-store · 备份导入', () => {
 
   it('重复键行编辑后仍保留整行', () => {
     const db = createDefaultDb()
+    db.fqcNg.push({ ws: '注塑', pn: 'P1' } as (typeof db.fqcNg)[number])
     const dup = db.fqcNg[0] as Record<string, unknown>
     dup.ws = 'EDITED-WS'
     dup.pn = 'EDITED-PN'

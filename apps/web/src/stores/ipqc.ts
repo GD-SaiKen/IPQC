@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
-import { exportDbJson, importDbJson, loadDb, resetDb, saveDb } from '@/db/ipqc-store'
+import { exportDbJson, importDbJson, loadDb, saveDb } from '@/db/ipqc-store'
 import { getCheckScores } from '@/domain/ipqc/seed'
 import type { CheckScores, IpqcDb, WorkshopFilter } from '@/domain/ipqc/types'
 
@@ -37,11 +37,6 @@ export const useIpqcStore = defineStore('ipqc', {
     },
     importFromJson(text: string) {
       this.db = importDbJson(text)
-      this.persist()
-    },
-    restoreSeed() {
-      this.db = resetDb()
-      this.checkScores = getCheckScores()
       this.persist()
     },
   },

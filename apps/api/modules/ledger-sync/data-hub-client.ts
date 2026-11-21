@@ -52,6 +52,8 @@ export function normalizeShare(raw: unknown): DataHubShare {
   return { id, name, status }
 }
 
+const ENTRIES_PAGE_SIZE = 200
+
 export async function listShareEntries(
   apiOrigin: string,
   accessToken: string,
@@ -59,10 +61,58 @@ export async function listShareEntries(
   path: string,
   fetchFn: FetchLike,
 ): Promise<DataHubDirectoryEntry[]> {
+  return listShareEntriesPage(
+    apiOrigin,
+    accessToken,
+    shareId,
+    path,
+    fetchFn,
+    1,
+    ENTRIES_PAGE_SIZE,
+  ).then((result) => result.list)
+}
+
+export async function listAllShareEntries(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  fetchFn: FetchLike,
+): Promise<DataHubDirectoryEntry[]> {
+  const all: DataHubDirectoryEntry[] = []
+  let page = 1
+  while (true) {
+    const { list, total } = await listShareEntriesPage(
+      apiOrigin,
+      accessToken,
+      shareId,
+      path,
+      fetchFn,
+      page,
+      ENTRIES_PAGE_SIZE,
+    )
+    all.push(...list)
+    if (list.length < ENTRIES_PAGE_SIZE || page * ENTRIES_PAGE_SIZE >= total) {
+      break
+    }
+    page += 1
+  }
+  return all
+}
+
+async function listShareEntriesPage(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  fetchFn: FetchLike,
+  page: number,
+  pageSize: number,
+): Promise<{ list: DataHubDirectoryEntry[]; total: number }> {
   const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/entries`, apiOrigin)
   url.searchParams.set('path', path)
-  url.searchParams.set('page', '1')
-  url.searchParams.set('pageSize', '200')
+  url.searchParams.set('page', String(page))
+  url.searchParams.set('pageSize', String(pageSize))
   const response = await fetchFn(url, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
@@ -70,8 +120,10 @@ export async function listShareEntries(
   if (!response.ok) {
     throw new DataHubRequestError(response.status, body)
   }
-  const data = parseEnvelope<{ list: DataHubDirectoryEntry[] }>(body)
-  return data.list ?? []
+  const data = parseEnvelope<{ list: DataHubDirectoryEntry[]; total?: number }>(body)
+  const list = data.list ?? []
+  const total = data.total ?? list.length
+  return { list, total }
 }
 
 export async function listShares(

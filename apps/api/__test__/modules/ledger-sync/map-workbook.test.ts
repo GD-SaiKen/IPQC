@@ -85,6 +85,31 @@ describe('mapWorkbooksToSnapshot', () => {
     expect(result).toEqual({ kind: 'reject', message: expect.stringContaining('缺少列') })
   })
 
+  it('投诉 CSV 单表可映射', () => {
+    const wb = new Map([
+      [
+        'complaint',
+        {
+          path: '/2026年前制程零件投诉跟进.csv',
+          sheets: [
+            {
+              name: 'csv',
+              rows: [
+                ['日期', '来源', '责任部门'],
+                ['2026-01-01', 'BC', '注塑'],
+              ],
+            },
+          ],
+        },
+      ],
+    ])
+    const files = [file('complaint', '2026年前制程零件投诉跟进.csv')]
+    const result = mapWorkbooksToSnapshot(files, wb, ['faInjectionBur'])
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.snapshot.cmp.length).toBeGreaterThan(0)
+  })
+
   it('毛边首件缺失不向 fa 写入占位', () => {
     const result = mapWorkbooksToSnapshot([], new Map(), ['faInjectionBur'])
     expect(result.kind).toBe('ok')

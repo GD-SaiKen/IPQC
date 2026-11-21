@@ -19,8 +19,8 @@ export const LEDGER_ROLES = [
 
 export type LedgerRole = (typeof LEDGER_ROLES)[number]
 
-/** 注塑毛边首件 / 终检源表可缺失，对应车间口径显示「—」 */
-export const OPTIONAL_LEDGER_ROLES: LedgerRole[] = ['faInjectionBur', 'fqcInjectionBur']
+/** 注塑毛边首件可缺失，对应车间口径显示「—」 */
+export const OPTIONAL_LEDGER_ROLES: LedgerRole[] = ['faInjectionBur']
 
 export const LEDGER_ROLE_LABELS: Record<LedgerRole, string> = {
   faFocus: '重点零件首件',

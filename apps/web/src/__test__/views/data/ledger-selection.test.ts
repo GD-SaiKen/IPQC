@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   buildPreviewHierarchyRows,
@@ -86,19 +86,6 @@ describe('ledger-selection', () => {
   })
 
   it('保存选择后生成多层级列表', () => {
-    const bucket: Record<string, string> = {}
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => bucket[key] ?? null,
-      setItem: (key: string, value: string) => {
-        bucket[key] = value
-      },
-      removeItem: (key: string) => {
-        delete bucket[key]
-      },
-      clear: () => {
-        Object.keys(bucket).forEach((key) => delete bucket[key])
-      },
-    })
     const payload = buildSyncSelection({
       directories: ['台账'],
       files: ['台账/单独/a.xls'],

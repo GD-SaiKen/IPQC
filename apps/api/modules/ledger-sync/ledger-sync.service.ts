@@ -1,6 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { randomUUID } from 'node:crypto'
+
+import { HttpException, Inject, Injectable } from '@nestjs/common'
 
 import { apiError, API_MSG, RuntimeConfigService } from '../../common'
+import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import type { AuthUser } from '../auth/auth.types'
 import { LEDGER_ROLE_LABELS } from './ledger-roles'
@@ -35,6 +38,12 @@ import {
   validateEntryPath,
   type FileCandidate,
 } from './select-files'
+import type { PutLedgerSyncConfigDto } from './dto/ledger-sync-config.dto'
+import type { LedgerSyncRunDto } from './dto/ledger-sync-run.dto'
+import { executeSyncWrites, planSyncApply } from './sync-db-apply'
+
+const CONFIG_ID = '00000000-0000-0000-0000-000000000001'
+const SYNC_ADVISORY_LOCK = 840321
 
 @Injectable()
 export class LedgerSyncService {
@@ -43,6 +52,9 @@ export class LedgerSyncService {
 
   @Inject(RuntimeConfigService)
   private readonly config!: RuntimeConfigService
+
+  @Inject(PrismaService)
+  private readonly prisma!: PrismaService
 
   async listShares(user: AuthUser, query: LedgerSharesQueryDto) {
     const page = query.page ?? 1
@@ -511,6 +523,288 @@ export class LedgerSyncService {
         mapped.message,
         mapped.status === 401 ? API_MSG.dataHubUnauthorized : 'bad_request',
       )
+    }
+  }
+
+  private assertAdmin(user: AuthUser): void {
+    if (user.role !== 'admin') {
+      throw apiError(403, '没有权限', API_MSG.forbidden)
+    }
+  }
+
+  async getSyncConfig(user: AuthUser) {
+    this.assertAdmin(user)
+    const row = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
+    const link = await this.auth.hasDataHubLink(user.id)
+    return {
+      shareId: row?.shareId ?? null,
+      selectedEntries: (row?.selectedEntries as unknown[]) ?? [],
+      excludedPaths: (row?.excludedPaths as string[]) ?? [],
+      hour: row?.hour ?? 6,
+      minute: row?.minute ?? 0,
+      configVersion: row?.configVersion ?? 0,
+      savedByUserId: row?.savedByUserId ?? null,
+      dataHubLinked: link.linked,
+      updatedAt: row?.updatedAt?.toISOString() ?? null,
+    }
+  }
+
+  async putSyncConfig(user: AuthUser, dto: PutLedgerSyncConfigDto) {
+    this.assertAdmin(user)
+    const link = await this.auth.hasDataHubLink(user.id)
+    if (!link.linked) {
+      throw apiError(400, '请先连接 data-hub', API_MSG.badRequest)
+    }
+    const prev = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
+    const nextVersion = (prev?.configVersion ?? 0) + 1
+    const row = await this.prisma.ledgerSyncConfig.upsert({
+      where: { id: CONFIG_ID },
+      create: {
+        id: CONFIG_ID,
+        shareId: dto.shareId ?? null,
+        selectedEntries: dto.selectedEntries,
+        excludedPaths: dto.excludedPaths,
+        hour: dto.hour,
+        minute: dto.minute,
+        savedByUserId: user.id,
+        configVersion: nextVersion,
+      },
+      update: {
+        shareId: dto.shareId ?? null,
+        selectedEntries: dto.selectedEntries,
+        excludedPaths: dto.excludedPaths,
+        hour: dto.hour,
+        minute: dto.minute,
+        savedByUserId: user.id,
+        configVersion: nextVersion,
+      },
+    })
+    return {
+      shareId: row.shareId,
+      selectedEntries: row.selectedEntries,
+      excludedPaths: row.excludedPaths,
+      hour: row.hour,
+      minute: row.minute,
+      configVersion: row.configVersion,
+      savedByUserId: row.savedByUserId,
+      updatedAt: row.updatedAt.toISOString(),
+    }
+  }
+
+  async listSyncRuns(
+    user: AuthUser,
+    query: { page?: number; pageSize?: number },
+  ) {
+    this.assertAdmin(user)
+    const page = query.page ?? 1
+    const pageSize = Math.min(query.pageSize ?? 10, 100)
+    const skip = (page - 1) * pageSize
+    const [list, total] = await this.prisma.$transaction([
+      this.prisma.ledgerSyncRun.findMany({
+        orderBy: { startedAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.ledgerSyncRun.count(),
+    ])
+    return {
+      list: list.map((r) => this.serializeRun(r)),
+      total,
+      page,
+      pageSize,
+    }
+  }
+
+  async listRunDiffs(
+    user: AuthUser,
+    runId: string,
+    query: { page?: number; pageSize?: number },
+  ) {
+    this.assertAdmin(user)
+    const page = query.page ?? 1
+    const pageSize = Math.min(query.pageSize ?? 10, 100)
+    const skip = (page - 1) * pageSize
+    const [list, total] = await this.prisma.$transaction([
+      this.prisma.ledgerSyncRunDiff.findMany({
+        where: { runId },
+        orderBy: [{ tableName: 'asc' }, { rowId: 'asc' }, { field: 'asc' }],
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.ledgerSyncRunDiff.count({ where: { runId } }),
+    ])
+    return { list, total, page, pageSize }
+  }
+
+  async runSync(user: AuthUser, dto: LedgerSyncRunDto) {
+    this.assertAdmin(user)
+    const config = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
+    if (!config?.shareId || !config.savedByUserId || !(config.selectedEntries as unknown[])?.length) {
+      await this.prisma.ledgerSyncRun.create({
+        data: {
+          runType: 'manual',
+          status: 'failed',
+          message: '尚未配置同步',
+          finishedAt: new Date(),
+          actorUserId: user.id,
+          configVersion: config?.configVersion ?? 0,
+        },
+      })
+      throw apiError(400, '尚未配置同步', API_MSG.badRequest)
+    }
+
+    const executorId = randomUUID()
+    const leaseUntil = new Date(Date.now() + 3 * 60 * 1000)
+    const run = await this.prisma.ledgerSyncRun.create({
+      data: {
+        runType: 'manual',
+        status: 'running',
+        executorId,
+        leaseExpiresAt: leaseUntil,
+        actorUserId: user.id,
+        configVersion: config.configVersion,
+      },
+    })
+
+    const lockRows = await this.prisma.$queryRaw<Array<{ locked: boolean }>>`
+      SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK}) AS locked
+    `
+    if (!lockRows[0]?.locked) {
+      await this.prisma.ledgerSyncRun.update({
+        where: { id: run.id, executorId, status: 'running' },
+        data: { status: 'failed', message: '已有同步正在执行', finishedAt: new Date() },
+      })
+      throw apiError(409, '已有同步正在执行', API_MSG.conflict)
+    }
+
+    try {
+      const tokenUserId = config.savedByUserId
+      const accessToken = await this.auth.getDataHubAccessToken(tokenUserId)
+      const body: LedgerSyncBodyDto = {
+        shareId: config.shareId,
+        selectedEntries: config.selectedEntries as LedgerSyncBodyDto['selectedEntries'],
+        excludedPaths: config.excludedPaths as string[],
+        previewFiles: dto.previewFiles,
+      }
+      const packed = await this.buildSelectedView(
+        { ...user, id: tokenUserId },
+        body,
+        accessToken,
+        true,
+      )
+      if (hasBlockingIssues(packed.issues)) {
+        throw apiError(400, packed.issues[0]?.message ?? '当前选择无法同步', API_MSG.badRequest)
+      }
+      if (dto.previewFiles?.length) {
+        const currentSnapshot = packed.files.map((file) => ({
+          path: file.path,
+          modifiedAt: file.modifiedAt,
+        }))
+        if (!comparePreviewFiles(dto.previewFiles, currentSnapshot)) {
+          throw apiError(400, '共享盘文件已变化，请重新核对', API_MSG.badRequest)
+        }
+      }
+      if (!packed.snapshot) {
+        throw apiError(400, '当前选择无法同步', API_MSG.badRequest)
+      }
+
+      const plan = await planSyncApply(this.prisma, packed.snapshot, packed.checkScores ?? {})
+      await this.prisma.$transaction(async (tx) => {
+        await executeSyncWrites(tx as unknown as PrismaService, plan)
+        if (plan.diffs.length) {
+          await tx.ledgerSyncRunDiff.createMany({
+            data: plan.diffs.map((d) => ({
+              runId: run.id,
+              tableName: d.tableName,
+              rowId: d.rowId ?? null,
+              field: d.field,
+              shareValue: d.shareValue,
+              gridValue: d.gridValue,
+              kind: d.kind,
+              workshop: d.workshop ?? null,
+              month: d.month ?? null,
+            })),
+          })
+        }
+        const updated = await tx.ledgerSyncRun.updateMany({
+          where: { id: run.id, status: 'running', executorId },
+          data: {
+            status: 'success',
+            message: '',
+            finishedAt: new Date(),
+            addedCount: plan.addedCount,
+            skippedCount: plan.skippedCount,
+            diffCount: plan.diffCount,
+            unmatchedCount: plan.unmatchedCount,
+            tombstoneSkipCount: plan.tombstoneSkipCount,
+          },
+        })
+        if (updated.count !== 1) {
+          throw apiError(500, '同步状态更新失败', API_MSG.internalError)
+        }
+      })
+
+      return {
+        id: run.id,
+        status: 'success',
+        addedCount: plan.addedCount,
+        skippedCount: plan.skippedCount,
+        diffCount: plan.diffCount,
+        unmatchedCount: plan.unmatchedCount,
+        tombstoneSkipCount: plan.tombstoneSkipCount,
+        diffs: plan.diffs,
+      }
+    } catch (error) {
+      let message = '同步失败'
+      if (error instanceof HttpException) {
+        const body = error.getResponse()
+        if (typeof body === 'object' && body && 'message' in body) {
+          message = String((body as { message: string }).message)
+        }
+      } else if (error instanceof Error) {
+        message = error.message
+      }
+      await this.prisma.ledgerSyncRun.updateMany({
+        where: { id: run.id, status: 'running', executorId },
+        data: { status: 'failed', message: String(message), finishedAt: new Date() },
+      })
+      throw error
+    } finally {
+      await this.prisma.$executeRaw`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK})`
+    }
+  }
+
+  private serializeRun(r: {
+    id: string
+    runType: string
+    status: string
+    message: string
+    startedAt: Date
+    finishedAt: Date | null
+    actorUserId: string | null
+    configVersion: number
+    scheduledRunDate: string | null
+    addedCount: number
+    skippedCount: number
+    diffCount: number
+    unmatchedCount: number
+    tombstoneSkipCount: number
+  }) {
+    return {
+      id: r.id,
+      runType: r.runType,
+      status: r.status,
+      message: r.message,
+      startedAt: r.startedAt.toISOString(),
+      finishedAt: r.finishedAt?.toISOString() ?? null,
+      actorUserId: r.actorUserId,
+      configVersion: r.configVersion,
+      scheduledRunDate: r.scheduledRunDate,
+      addedCount: r.addedCount,
+      skippedCount: r.skippedCount,
+      diffCount: r.diffCount,
+      unmatchedCount: r.unmatchedCount,
+      tombstoneSkipCount: r.tombstoneSkipCount,
     }
   }
 }

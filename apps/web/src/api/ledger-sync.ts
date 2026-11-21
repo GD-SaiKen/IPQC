@@ -1,7 +1,4 @@
 import { request } from '@/utils/request'
-import type { LedgerSnapshot } from '@/domain/ipqc/merge-snapshot'
-import type { CheckScores } from '@/domain/ipqc/types'
-
 const BASE = '/ledger-sync'
 
 export interface LedgerShareItem {
@@ -100,19 +97,60 @@ export function previewLedgerSync(body: {
   })
 }
 
-export function syncLedger(body: {
-  shareId: string
+export interface LedgerSyncConfig {
+  shareId: string | null
   selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
-  excludedPaths?: string[]
-  previewFiles: Array<{ path: string; modifiedAt?: string }>
-  rootPaths?: string[]
-}): Promise<{
-  files: PreviewLedgerFile[]
-  counts: Record<string, number>
-  snapshot: LedgerSnapshot
-  checkScores?: CheckScores
-}> {
-  return request.post(`${BASE}`, body, {
+  excludedPaths: string[]
+  hour: number
+  minute: number
+  configVersion: number
+  savedByUserId: string | null
+  dataHubLinked: boolean
+  updatedAt: string | null
+}
+
+export function fetchSyncConfig(): Promise<LedgerSyncConfig> {
+  return request.get(`${BASE}/config`, {
+    requestOptions: { sessionExpiredOn401: false },
+  })
+}
+
+export function putSyncConfig(body: {
+  shareId?: string | null
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  excludedPaths: string[]
+  hour: number
+  minute: number
+}): Promise<LedgerSyncConfig & { updatedAt: string }> {
+  return request.put(`${BASE}/config`, body, {
+    requestOptions: { sessionExpiredOn401: false },
+  })
+}
+
+export interface LedgerSyncRunResult {
+  id: string
+  status: string
+  addedCount: number
+  skippedCount: number
+  diffCount: number
+  unmatchedCount: number
+  tombstoneSkipCount: number
+  diffs: Array<{
+    tableName: string
+    rowId?: string
+    field: string
+    shareValue: string
+    gridValue: string
+    kind: string
+    workshop?: string
+    month?: string
+  }>
+}
+
+export function runLedgerSync(body: {
+  previewFiles?: Array<{ path: string; modifiedAt?: string }>
+}): Promise<LedgerSyncRunResult> {
+  return request.post(`${BASE}/run`, body, {
     requestOptions: { sessionExpiredOn401: false },
   })
 }

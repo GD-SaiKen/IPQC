@@ -1,7 +1,5 @@
 export type PreviewFilter = 'all' | 'parsed' | 'unparsed' | 'problem'
 
-const SAVED_SELECTION_KEY = 'ipqc_ledger_sync_saved_selection'
-
 export type HierarchyRowKind = 'directory' | 'file' | 'hint'
 
 export interface HierarchyRow {
@@ -28,6 +26,8 @@ export interface SyncSelectionPayload {
   selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
   excludedPaths: string[]
 }
+
+const selectionByShare = new Map<string, SavedLedgerSelection>()
 
 export interface PreviewLedgerFile {
   path: string
@@ -62,14 +62,12 @@ export function saveLedgerSelection(shareId: string, payload: SyncSelectionPaylo
     payload: normalizeSyncSelection(payload),
     savedAt: new Date().toISOString(),
   }
-  const bucket = readSavedSelectionBucket()
-  bucket[shareId] = record
-  localStorage.setItem(SAVED_SELECTION_KEY, JSON.stringify(bucket))
+  selectionByShare.set(shareId, record)
   return record
 }
 
 export function loadLedgerSelection(shareId: string): SavedLedgerSelection | null {
-  const raw = readSavedSelectionBucket()[shareId]
+  const raw = selectionByShare.get(shareId)
   if (!raw) {
     return null
   }
@@ -80,8 +78,7 @@ export function loadLedgerSelection(shareId: string): SavedLedgerSelection | nul
 }
 
 export function listSavedLedgerSelections(): SavedLedgerSelection[] {
-  const bucket = readSavedSelectionBucket()
-  return Object.values(bucket)
+  return [...selectionByShare.values()]
     .map((raw) => ({
       ...raw,
       payload: normalizeSyncSelection(raw.payload),
@@ -94,22 +91,7 @@ export function latestSavedLedgerSelection(): SavedLedgerSelection | null {
 }
 
 export function clearLedgerSelection(shareId: string): void {
-  const bucket = readSavedSelectionBucket()
-  delete bucket[shareId]
-  localStorage.setItem(SAVED_SELECTION_KEY, JSON.stringify(bucket))
-}
-
-function readSavedSelectionBucket(): Record<string, SavedLedgerSelection> {
-  const raw = localStorage.getItem(SAVED_SELECTION_KEY)
-  if (!raw) {
-    return {}
-  }
-  try {
-    const data = JSON.parse(raw) as Record<string, SavedLedgerSelection>
-    return data && typeof data === 'object' ? data : {}
-  } catch {
-    return {}
-  }
+  selectionByShare.delete(shareId)
 }
 
 export function isSameSelection(a: SyncSelectionPayload, b: SyncSelectionPayload): boolean {

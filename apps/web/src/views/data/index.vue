@@ -88,7 +88,13 @@
               :value="item.id"
             />
           </el-select>
-          <el-button :disabled="!shareId || !canSaveSelection" @click="onSaveSelection">保存选择</el-button>
+          <el-button
+            :disabled="!shareId || !canSaveSelection"
+            :loading="savingSelection"
+            @click="onSaveSelection"
+          >
+            保存选择
+          </el-button>
         </div>
         <p v-if="selectionDirty && savedSelection" class="muted small sync-dirty-hint">
           树上勾选与已保存范围不一致；核对解析仍使用上方已保存内容。调整完成后请点「保存选择」。
@@ -131,7 +137,7 @@
               :disabled="!canConfirmPreview"
               @click="onConfirmSync"
             >
-              确认写入本机
+              立即同步到服务器
             </el-button>
             <el-button @click="previewResult = null">取消</el-button>
           </div>
@@ -195,8 +201,10 @@ import {
   countLedgerScope,
   listLedgerShares,
   listShareDirectories,
+  fetchSyncConfig,
   previewLedgerSync,
-  syncLedger,
+  putSyncConfig,
+  runLedgerSync,
   type LedgerSelectionScope,
   type LedgerShareItem,
   type PreviewIssue,
@@ -212,9 +220,7 @@ import {
   filterRedundantFilesUnderDirectories,
   isSameSelection,
   isUnderPath,
-  latestSavedLedgerSelection,
-  loadLedgerSelection,
-  saveLedgerSelection,
+  normalizeSyncSelection,
   splitSelectionPayload,
   type PreviewFilter,
   type SavedLedgerSelection,
@@ -226,7 +232,6 @@ import LedgerSyncPreview from '@/components/ledger-sync-preview/ledger-sync-prev
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
-import { mergeCheckScores, mergeLedgerSnapshot } from '@/domain/ipqc/merge-snapshot'
 import { CALIBER_GROUPS, DATA_SOURCES } from '@/domain/ipqc/sources'
 import { useIpqcStore } from '@/stores/ipqc'
 
@@ -245,6 +250,9 @@ const savedSelectionScopeLoading = ref(false)
 const savedSelectionScopeError = ref('')
 const pendingTreeRestore = ref<SyncSelectionPayload | null>(null)
 const restoringTree = ref(false)
+const syncHour = ref(6)
+const syncMinute = ref(0)
+const savingSelection = ref(false)
 
 function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
   const split = splitSelectionPayload(payload)
@@ -298,8 +306,9 @@ async function refreshSavedSelectionScope(): Promise<void> {
 }
 
 watch(shareId, async (next) => {
-  const draft = next ? loadLedgerSelection(next) : null
-  pendingTreeRestore.value = draft?.payload ?? null
+  const draft =
+    next && savedSelection.value?.shareId === next ? savedSelection.value.payload : null
+  pendingTreeRestore.value = draft
   if (pendingTreeRestore.value) {
     applyPayloadToTreeState(pendingTreeRestore.value)
   } else {
@@ -455,17 +464,34 @@ const disabledShares = computed(() =>
   shares.value.filter((item) => item.status !== 'ready' && item.name.trim() !== ''),
 )
 
-function hydrateSavedSelection(): void {
-  const latest = latestSavedLedgerSelection()
-  if (!latest) {
+async function hydrateSavedSelection(): Promise<void> {
+  try {
+    const cfg = await fetchSyncConfig()
+    syncHour.value = cfg.hour
+    syncMinute.value = cfg.minute
     savedSelection.value = null
-    return
+    if (
+      cfg.shareId &&
+      Array.isArray(cfg.selectedEntries) &&
+      cfg.selectedEntries.length > 0
+    ) {
+      const payload = normalizeSyncSelection({
+        selectedEntries: cfg.selectedEntries,
+        excludedPaths: cfg.excludedPaths ?? [],
+      })
+      savedSelection.value = {
+        shareId: cfg.shareId,
+        payload,
+        savedAt: cfg.updatedAt ?? new Date().toISOString(),
+      }
+      if (!shareId.value) {
+        shareId.value = cfg.shareId
+      }
+      await refreshSavedSelectionScope()
+    }
+  } catch {
+    savedSelection.value = null
   }
-  savedSelection.value = latest
-  if (!shareId.value) {
-    shareId.value = latest.shareId
-  }
-  void refreshSavedSelectionScope()
 }
 
 async function refreshLinkAndShares(): Promise<void> {
@@ -491,11 +517,8 @@ async function refreshLinkAndShares(): Promise<void> {
 }
 
 onMounted(async () => {
-  hydrateSavedSelection()
   await refreshLinkAndShares()
-  if (!savedSelection.value) {
-    hydrateSavedSelection()
-  }
+  await hydrateSavedSelection()
 })
 
 async function onConnectDataHub(): Promise<void> {
@@ -551,16 +574,37 @@ function formatSavedAt(iso: string): string {
   return iso.replace('T', ' ').slice(0, 19)
 }
 
-function onSaveSelection(): void {
-  if (!shareId.value || !canSaveSelection.value) {
+async function onSaveSelection(): Promise<void> {
+  if (!shareId.value || !canSaveSelection.value || savingSelection.value) {
     return
   }
-  savedSelection.value = saveLedgerSelection(shareId.value, syncPayload.value)
-  pendingTreeRestore.value = { ...savedSelection.value.payload }
-  previewResult.value = null
-  void nextTick().then(() => restoreTreeSelection())
-  void refreshSavedSelectionScope()
-  ElMessage.success('已保存当前选择')
+  savingSelection.value = true
+  try {
+    const cfg = await putSyncConfig({
+      shareId: shareId.value,
+      selectedEntries: syncPayload.value.selectedEntries,
+      excludedPaths: syncPayload.value.excludedPaths,
+      hour: syncHour.value,
+      minute: syncMinute.value,
+    })
+    const payload = normalizeSyncSelection({
+      selectedEntries: cfg.selectedEntries,
+      excludedPaths: cfg.excludedPaths ?? [],
+    })
+    savedSelection.value = {
+      shareId: shareId.value,
+      payload,
+      savedAt: cfg.updatedAt ?? new Date().toISOString(),
+    }
+    pendingTreeRestore.value = { ...payload }
+    previewResult.value = null
+    await nextTick()
+    restoreTreeSelection()
+    await refreshSavedSelectionScope()
+    ElMessage.success('已保存核对范围（全厂生效）')
+  } finally {
+    savingSelection.value = false
+  }
 }
 
 async function onPreviewSync(): Promise<void> {
@@ -582,31 +626,27 @@ async function onConfirmSync(): Promise<void> {
   if (!previewResult.value || !savedSelection.value) return
   try {
     await ElMessageBox.confirm(
-      '确认后将以共享盘快照覆盖本机首件、终检、投诉、点检得分与绩效；培训资料 / 记录 / 考核 / 技能矩阵保留。',
-      '写入本机台账',
-      { type: 'warning', confirmButtonText: '确认写入', cancelButtonText: '取消' },
+      '确认后将把共享盘解析结果写入服务器台账：新增入库、相同跳过、不同以当前页面为准并记录差异；点检得分只读更新。',
+      '立即同步',
+      { type: 'warning', confirmButtonText: '开始同步', cancelButtonText: '取消' },
     )
   } catch {
     return
   }
   syncing.value = true
   try {
-    const data = await syncLedger({
-      shareId: savedSelection.value.shareId,
-      selectedEntries: savedSelection.value.payload.selectedEntries,
-      excludedPaths: savedSelection.value.payload.excludedPaths,
+    const data = await runLedgerSync({
       previewFiles: previewResult.value.files.map((file) => ({
         path: file.path,
         modifiedAt: file.modifiedAt,
       })),
     })
-    store.db = mergeLedgerSnapshot(store.db, data.snapshot)
-    if (data.checkScores) {
-      store.checkScores = mergeCheckScores(store.checkScores, data.checkScores)
-    }
-    store.persist()
+    await store.loadLedger()
     previewResult.value = null
-    ElMessage.success('共享盘台账已写入本机')
+    const diffHint = data.diffCount > 0 ? `，差异 ${data.diffCount} 条（以页面为准）` : ''
+    ElMessage.success(
+      `同步完成：新增 ${data.addedCount}、跳过 ${data.skippedCount}${diffHint}`,
+    )
   } finally {
     syncing.value = false
   }

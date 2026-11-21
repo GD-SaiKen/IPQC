@@ -56,8 +56,3 @@ export function importDbJson(text: string): IpqcDb {
   if (!isIpqcDb(d)) throw new Error('invalid ipqc backup')
   return d
 }
-
-export function resetDb(): IpqcDb {
-  localStorage.removeItem(STORAGE_KEY)
-  return createDefaultDb()
-}

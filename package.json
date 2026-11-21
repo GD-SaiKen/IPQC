@@ -10,6 +10,7 @@
     "test": "pnpm --filter @ipqc/web test && pnpm --filter @ipqc/api test",
     "lint": "pnpm --filter @ipqc/web lint && pnpm --filter @ipqc/api lint",
     "extract-seed": "node scripts/extract-prototype-seed.mjs",
+    "empty-seed": "node scripts/write-empty-seed.mjs",
     "prisma:generate": "prisma generate"
   },
   "devDependencies": {

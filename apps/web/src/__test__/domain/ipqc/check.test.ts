@@ -11,10 +11,17 @@ import {
   chkStats,
   chkTrend,
 } from '@/domain/ipqc/check'
-import { getCheckScores } from '@/domain/ipqc/seed'
 import { WORKSHOPS } from '@/domain/ipqc/workshops'
 
-const scores = getCheckScores()
+const scores = {
+  注塑: { 1: 88, 2: 90, 10: 93 },
+  注塑毛边: { 9: 40, 10: 57.3 },
+  压铸: { 10: 91 },
+  五金: { 10: 89 },
+  涂装: { 10: 87 },
+  印刷: { 10: 90 },
+}
+
 const keys = WORKSHOPS.map((w) => w.key)
 
 describe('chk', () => {
@@ -40,8 +47,8 @@ describe('chk', () => {
   it('月趋势按当月适用满分归一，不借用最近月满分', () => {
     const rank = chkRank(scores, ['注塑毛边'])
     expect(rank[0].max).toBe(60)
-    expect(rank[0].trend[0]).toBeCloseTo(85.5, 1)
-    expect(rank[0].trend[9]).toBeCloseTo(95.5, 1)
+    expect(rank[0].trend[0]).toBeCloseTo(100, 1)
+    expect(rank[0].trend[1]).toBeCloseTo(95.5, 1)
   })
 
   it('趋势 1–10 月，缺月为 null', () => {

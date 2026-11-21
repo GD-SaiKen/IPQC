@@ -227,7 +227,7 @@ export class LedgerSyncService {
     await this.resolveReadyShare(user, body.shareId, accessToken)
     const packed = await this.buildSelectedView(user, body, accessToken, true)
     if (hasBlockingIssues(packed.issues)) {
-      throw apiError(400, packed.issues[0]?.message ?? '当前选择无法写入本机', 'bad_request')
+      throw apiError(400, packed.issues[0]?.message ?? '当前选择无法同步到服务器', 'bad_request')
     }
     const currentSnapshot = packed.files.map((file) => ({
       path: file.path,
@@ -237,7 +237,7 @@ export class LedgerSyncService {
       throw apiError(400, '共享盘文件已变化，请重新核对', 'bad_request')
     }
     if (!packed.snapshot || !packed.counts) {
-      throw apiError(400, '当前选择无法写入本机', 'bad_request')
+      throw apiError(400, '当前选择无法同步到服务器', 'bad_request')
     }
     return {
       files: packed.files,
@@ -265,10 +265,7 @@ export class LedgerSyncService {
       : undefined
     let checkScores: Record<string, Record<string, number>> | undefined
 
-    const canLoad =
-      analysis.files.length > 0 &&
-      analysis.duplicates.length === 0 &&
-      analysis.invalid.length === 0
+    const canLoad = analysis.files.length > 0 && analysis.duplicates.length === 0
 
     if (canLoad) {
       const loaded = await this.loadMatchedWorkbooks(body.shareId, accessToken, analysis.files)
@@ -276,9 +273,14 @@ export class LedgerSyncService {
       files = marked.files
       issues = [...issues, ...marked.issues]
 
-      if (includeSnapshot && !hasBlockingIssues(issues)) {
+      const mappableFiles = analysis.files.filter(
+        (file) =>
+          loaded.workbooks.has(file.role) && !analysis.missingOptional.includes(file.role),
+      )
+
+      if (mappableFiles.length > 0) {
         const mapResult = mapWorkbooksToSnapshot(
-          analysis.files.filter((file) => !analysis.missingOptional.includes(file.role)),
+          mappableFiles,
           loaded.workbooks,
           analysis.missingOptional,
         )
@@ -287,29 +289,23 @@ export class LedgerSyncService {
             type: 'column_mismatch',
             message: mapResult.message,
           })
+          const failedPaths = new Set(
+            mappableFiles.filter((file) => mapResult.message.includes(file.name)).map((f) => f.path),
+          )
+          if (failedPaths.size === 0 && mappableFiles.length === 1) {
+            failedPaths.add(mappableFiles[0]!.path)
+          }
           files = files.map((file) =>
-            file.status === 'parsed'
+            failedPaths.has(file.path)
               ? { ...file, status: 'invalid', reason: mapResult.message }
               : file,
           )
         } else {
           counts = mapResult.counts
-          snapshot = mapResult.snapshot
-          checkScores = mapResult.checkScores
-        }
-      } else if (!includeSnapshot && !hasBlockingIssues(issues)) {
-        const mapResult = mapWorkbooksToSnapshot(
-          analysis.files.filter((file) => !analysis.missingOptional.includes(file.role)),
-          loaded.workbooks,
-          analysis.missingOptional,
-        )
-        if (mapResult.kind === 'ok') {
-          counts = mapResult.counts
-        } else {
-          issues.push({
-            type: 'column_mismatch',
-            message: mapResult.message,
-          })
+          if (includeSnapshot) {
+            snapshot = mapResult.snapshot
+            checkScores = mapResult.checkScores
+          }
         }
       }
     }

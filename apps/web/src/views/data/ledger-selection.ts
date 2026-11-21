@@ -429,13 +429,26 @@ export function filterPreviewFiles(files: PreviewLedgerFile[], filter: PreviewFi
 }
 
 export function canConfirmSync(issues: PreviewIssue[], files: PreviewLedgerFile[]): boolean {
-  if (issues.some((issue) => ['duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type))) {
+  if (issues.some((issue) => issue.type === 'duplicate')) {
     return false
   }
-  if (files.some((file) => file.status === 'duplicate' || file.status === 'invalid')) {
+  if (files.some((file) => file.status === 'duplicate')) {
     return false
   }
   return files.some((file) => file.status === 'parsed')
+}
+
+export function explainSyncDisabled(issues: PreviewIssue[], files: PreviewLedgerFile[]): string {
+  if (issues.some((issue) => issue.type === 'duplicate')) {
+    return '同一台账角色存在多个文件，请先排除重复项后再同步。'
+  }
+  if (files.some((file) => file.status === 'duplicate')) {
+    return '存在标记为「重复」的文件，请先处理后再同步。'
+  }
+  if (!files.some((file) => file.status === 'parsed')) {
+    return '当前没有状态为「已解析」的文件，无法同步。'
+  }
+  return ''
 }
 
 export const STATUS_LABELS: Record<string, string> = {

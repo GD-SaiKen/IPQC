@@ -4,7 +4,7 @@
       <template #filters>
         <el-radio-group :model-value="filter" size="small" @update:model-value="onFilterChange">
           <el-radio-button value="all">全部文件</el-radio-button>
-          <el-radio-button value="parsed">将写入本机</el-radio-button>
+          <el-radio-button value="parsed">将写入服务器</el-radio-button>
           <el-radio-button value="unparsed">未解析</el-radio-button>
           <el-radio-button value="problem">存在问题</el-radio-button>
         </el-radio-group>

@@ -215,6 +215,7 @@
             v-model:filter="previewFilter"
             :files="previewResult.files"
           />
+          <p v-if="syncDisabledHint" class="muted small sync-disabled-hint">{{ syncDisabledHint }}</p>
           <div class="actions" style="margin-top: 12px">
             <el-button
               type="primary"
@@ -303,6 +304,7 @@ import {
   buildSavedSelectionRows,
   buildSyncSelection,
   canConfirmSync,
+  explainSyncDisabled,
   canPreviewSelection,
   directoryFullyExcluded,
   filterRedundantFilesUnderDirectories,
@@ -565,6 +567,13 @@ const canConfirmPreview = computed(() => {
     return false
   }
   return canConfirmSync(previewResult.value.issues, previewResult.value.files)
+})
+
+const syncDisabledHint = computed(() => {
+  if (!previewResult.value || canConfirmPreview.value) {
+    return ''
+  }
+  return explainSyncDisabled(previewResult.value.issues, previewResult.value.files)
 })
 
 const readyShares = computed(() => shares.value.filter((item) => item.status === 'ready'))

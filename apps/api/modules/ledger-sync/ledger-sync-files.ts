@@ -249,10 +249,9 @@ export function summarizeLedgerFiles(files: LedgerFileRecord[], issues: LedgerIs
   }
 }
 
+/** 仅角色重复阻止同步；单文件无效/缺列等允许其余已解析文件继续入库 */
 export function hasBlockingIssues(issues: LedgerIssue[]): boolean {
-  return issues.some((issue) =>
-    ['duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type),
-  )
+  return issues.some((issue) => issue.type === 'duplicate')
 }
 
 export function comparePreviewFiles(

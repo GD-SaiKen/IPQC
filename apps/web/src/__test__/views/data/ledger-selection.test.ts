@@ -160,6 +160,15 @@ describe('ledger-selection', () => {
         [{ path: 'a', name: 'a', extension: 'xls', status: 'parsed' }],
       ),
     ).toBe(true)
+    expect(
+      canConfirmSync(
+        [{ type: 'read_failed', message: '读取失败' }],
+        [
+          { path: 'a', name: 'a', extension: 'xls', status: 'parsed' },
+          { path: 'b', name: 'b', extension: 'xls', status: 'invalid' },
+        ],
+      ),
+    ).toBe(true)
     expect(canConfirmSync([], [])).toBe(false)
   })
 })

@@ -110,7 +110,7 @@
     </SectionCard>
 
     <SectionCard title="加减分明细" subtitle="可编辑 · 失焦保存后排名重算">
-      <IpqcEditableTable
+      <IpqcDataGrid
         table-id="perf"
         unit="条"
         file-base="绩效加减分"
@@ -151,8 +151,9 @@
 import { computed } from 'vue'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcHbar from '@/components/ipqc-chart/ipqc-hbar.vue'
-import IpqcEditableTable from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
-import type { EditColumn } from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
+import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import { fp, shortDept } from '@/domain/ipqc/format'
 import {
   computePerf,
@@ -205,8 +206,8 @@ const columns: EditColumn[] = [
 function persist(): void {
   store.persist()
 }
-function addRow(): void {
-  store.db.perf.unshift({
+async function addRow(): Promise<void> {
+  const created = await createLedgerTableRow('perf', {
     date: new Date().toISOString().slice(0, 10),
     dept: isAll.value ? '注塑' : key.value,
     who: '',
@@ -214,9 +215,11 @@ function addRow(): void {
     item: '',
     score: 0,
   })
+  store.db.perf.unshift(created as (typeof store.db.perf)[number])
   store.persist()
 }
-function deleteRow(row: Record<string, unknown>): void {
+async function deleteRow(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('perf', row)
   const list = store.db.perf
   const i = list.indexOf(row as unknown as (typeof list)[number])
   if (i < 0) return

@@ -46,6 +46,14 @@
 
       <div class="fa-main">
         <el-alert
+          v-if="rowMissing"
+          title="该行已删除"
+          type="warning"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 12px"
+        />
+        <el-alert
           v-if="key === '注塑毛边'"
           title="首件源表未覆盖该责任区"
           type="info"
@@ -166,13 +174,14 @@
             </el-radio-group>
             <span class="muted small">判定 NG 时「NG 确认」按阶段显示责任角色，OK 显示「—」。</span>
           </div>
-          <IpqcEditableTable
+          <IpqcDataGrid
             table-id="fa"
             unit="条"
             file-base="首件巡检"
             :rows="faRows"
             :columns="columns"
             :page-size="15"
+            :row-class="rowFocusClass"
             placeholder="搜索日期 / 料号 / 品名 / 检验项 / 检验员"
             show-add
             show-delete
@@ -191,8 +200,10 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import SectionCard from '@/components/section-card/section-card.vue'
-import IpqcEditableTable from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
-import type { EditColumn } from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
+import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
+import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import IpqcBarChart from '@/components/ipqc-chart/ipqc-bar-chart.vue'
 import IpqcHbar from '@/components/ipqc-chart/ipqc-hbar.vue'
 import {
@@ -221,6 +232,7 @@ import type { WorkshopFilter } from '@/domain/ipqc/types'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
+const { rowMissing, rowFocusClass } = useLedgerRowFocus('fa')
 const key = computed(() => store.workshop as WorkshopFilter)
 const isAll = computed(() => key.value === '全部')
 const inWs = (dept: unknown) => isAll.value || shortDept(dept) === key.value
@@ -310,8 +322,8 @@ function persist(): void {
   store.persist()
 }
 
-function addRow(): void {
-  store.db.fa.unshift({
+async function addRow(): Promise<void> {
+  const created = await createLedgerTableRow('fa', {
     date: new Date().toISOString().slice(0, 10),
     stage: stage.value === '全部' ? '量产' : stage.value,
     dept: isAll.value ? '注塑' : key.value,
@@ -329,10 +341,12 @@ function addRow(): void {
     eng: '',
     src: '实测',
   })
+  store.db.fa.unshift(created as (typeof store.db.fa)[number])
   store.persist()
 }
 
-function deleteRow(row: Record<string, unknown>): void {
+async function deleteRow(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('fa', row)
   const list = store.db.fa
   const i = list.indexOf(row as unknown as (typeof list)[number])
   if (i < 0) return

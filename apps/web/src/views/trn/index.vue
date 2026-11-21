@@ -51,7 +51,7 @@
       </div>
 
       <template v-if="tab === 'mat'">
-        <IpqcEditableTable
+        <IpqcDataGrid
           table-id="trn-mat"
           unit="份"
           file-base="培训资料"
@@ -70,7 +70,7 @@
       </template>
 
       <template v-else-if="tab === 'trn'">
-        <IpqcEditableTable
+        <IpqcDataGrid
           table-id="trn-record"
           unit="场"
           file-base="培训实施"
@@ -88,7 +88,7 @@
       </template>
 
       <template v-else-if="tab === 'exam'">
-        <IpqcEditableTable
+        <IpqcDataGrid
           table-id="trn-exam"
           unit="人"
           file-base="培训考核"
@@ -153,8 +153,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import SectionCard from '@/components/section-card/section-card.vue'
-import IpqcEditableTable from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
-import type { EditColumn } from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
+import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import { fp } from '@/domain/ipqc/format'
 import {
   nextSkillLevel,
@@ -287,8 +288,8 @@ function persist(): void {
 function defaultDept(): string {
   return key.value === '全部' ? '注塑' : key.value
 }
-function addMaterial(): void {
-  store.db.mat.unshift({
+async function addMaterial(): Promise<void> {
+  const created = await createLedgerTableRow('mat', {
     t: '',
     dept: defaultDept(),
     type: '检验标准',
@@ -296,13 +297,15 @@ function addMaterial(): void {
     date: new Date().toISOString().slice(0, 10),
     pages: 0,
   })
+  store.db.mat.unshift(created as (typeof store.db.mat)[number])
   store.persist()
 }
-function deleteMaterial(row: Record<string, unknown>): void {
+async function deleteMaterial(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('mat', row)
   removeRow(store.db.mat, row)
 }
-function addRecord(): void {
-  store.db.trn.unshift({
+async function addRecord(): Promise<void> {
+  const created = await createLedgerTableRow('trn', {
     date: new Date().toISOString().slice(0, 10),
     dept: defaultDept(),
     topic: '',
@@ -312,13 +315,15 @@ function addRecord(): void {
     way: '现场提问',
     pass: 0,
   })
+  store.db.trn.unshift(created as (typeof store.db.trn)[number])
   store.persist()
 }
-function deleteRecord(row: Record<string, unknown>): void {
+async function deleteRecord(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('trn', row)
   removeRow(store.db.trn, row)
 }
-function addExam(): void {
-  store.db.exam.unshift({
+async function addExam(): Promise<void> {
+  const created = await createLedgerTableRow('exam', {
     date: new Date().toISOString().slice(0, 10),
     who: '',
     dept: defaultDept(),
@@ -326,9 +331,11 @@ function addExam(): void {
     score: 0,
     level: 'B',
   })
+  store.db.exam.unshift(created as (typeof store.db.exam)[number])
   store.persist()
 }
-function deleteExam(row: Record<string, unknown>): void {
+async function deleteExam(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('exam', row)
   removeRow(store.db.exam, row)
 }
 function removeRow(list: Record<string, unknown>[], row: Record<string, unknown>): void {

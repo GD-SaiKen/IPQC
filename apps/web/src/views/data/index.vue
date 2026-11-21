@@ -4,14 +4,12 @@
       本机存储写入失败（可能已满或被浏览器限制）。请立即导出 JSON 备份，避免刷新后丢失编辑。
     </div>
 
-    <SectionCard title="数据与设置" subtitle="本机 localStorage 自动保存 · 建议每月导出 JSON">
+    <SectionCard title="数据与设置" subtitle="台账保存在服务器 · 可导出当前快照 JSON">
       <div class="actions no-print">
-        <el-button type="primary" @click="onExport">导出 JSON 备份</el-button>
-        <el-button @click="pickFile">导入 JSON</el-button>
-        <input ref="fileRef" type="file" accept=".json" hidden @change="onFile" />
+        <el-button type="primary" :loading="exporting" @click="onExport">导出服务器台账 JSON</el-button>
       </div>
       <p class="muted small">
-        最近保存：{{ store.lastSavedAt || '尚未保存' }} · 导入会覆盖全库。
+        单元格编辑自动写入服务器 · 最近本地提示：{{ store.lastSavedAt || '—' }}
       </p>
 
       <div class="sync-block no-print">
@@ -137,6 +135,7 @@
                 <th>跳过</th>
                 <th>差异</th>
                 <th>说明</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -148,9 +147,56 @@
                 <td>{{ row.skippedCount }}</td>
                 <td>{{ row.diffCount }}</td>
                 <td class="sync-run-msg">{{ row.message || '—' }}</td>
+                <td>
+                  <el-button
+                    v-if="row.diffCount > 0"
+                    type="primary"
+                    link
+                    @click="openRunDiffs(row.id)"
+                  >
+                    差异
+                  </el-button>
+                </td>
               </tr>
             </tbody>
           </table>
+          <div v-if="activeDiffRunId" class="sync-diffs">
+            <h6 class="sync-subtitle">差异明细</h6>
+            <p v-if="diffLoading" class="muted small">加载中…</p>
+            <table v-else-if="syncDiffs.length" class="sync-runs-table">
+              <thead>
+                <tr>
+                  <th>表</th>
+                  <th>字段</th>
+                  <th>共享盘</th>
+                  <th>系统</th>
+                  <th>类型</th>
+                  <th>跳转</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="d in syncDiffs" :key="d.id">
+                  <td>{{ d.tableName }}</td>
+                  <td>{{ d.field }}</td>
+                  <td>{{ d.shareValue || '—' }}</td>
+                  <td>{{ d.gridValue || '—' }}</td>
+                  <td>{{ d.kind }}</td>
+                  <td>
+                    <el-button
+                      v-if="d.kind !== 'unmatched' && diffLinkTarget(d.tableName, d.rowId, d.workshop, d.month)"
+                      type="primary"
+                      link
+                      @click="jumpDiff(d)"
+                    >
+                      打开
+                    </el-button>
+                    <span v-else class="muted small">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="muted small">该轮次无差异记录。</p>
+          </div>
         </div>
         <div v-if="previewResult" class="sync-preview sync-preview--crud">
           <p v-if="previewResult.summary" class="muted small">
@@ -237,6 +283,7 @@ import {
   fetchSyncConfig,
   previewLedgerSync,
   putSyncConfig,
+  listLedgerSyncRunDiffs,
   listLedgerSyncRuns,
   runLedgerSync,
   type LedgerSelectionScope,
@@ -268,10 +315,13 @@ import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
 import { CALIBER_GROUPS, DATA_SOURCES } from '@/domain/ipqc/sources'
+import { exportLedgerJson } from '@/api/ledger'
+import { diffLinkTarget } from '@/composables/ledger-table-key'
 import { useIpqcStore } from '@/stores/ipqc'
+import { useRouter } from 'vue-router'
 
 const store = useIpqcStore()
-const fileRef = ref<HTMLInputElement | null>(null)
+const router = useRouter()
 const shares = ref<LedgerShareItem[]>([])
 const shareId = ref('')
 const treeRef = ref<TreeInstance>()
@@ -289,6 +339,22 @@ const syncHour = ref(6)
 const syncMinute = ref(0)
 const savingSelection = ref(false)
 const syncRuns = ref<LedgerSyncRunListItem[]>([])
+const exporting = ref(false)
+const activeDiffRunId = ref('')
+const syncDiffs = ref<
+  Array<{
+    id: string
+    tableName: string
+    rowId: string | null
+    field: string
+    shareValue: string
+    gridValue: string
+    kind: string
+    workshop: string | null
+    month: string | null
+  }>
+>([])
+const diffLoading = ref(false)
 
 function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
   const split = splitSelectionPayload(payload)
@@ -852,41 +918,36 @@ function exportCsv(key: string): void {
   downloadCsv(`IPQC_${t.label}`, t.columns, rowsOf(key))
 }
 
-function onExport(): void {
-  const blob = new Blob([store.exportJson()], { type: 'application/json' })
-  downloadBlob(blob, `ipqc-backup-${new Date().toISOString().slice(0, 10)}.json`)
-  ElMessage.success('JSON 备份已导出')
-}
-
-function pickFile(): void {
-  fileRef.value?.click()
-}
-
-async function onFile(ev: Event): Promise<void> {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+async function onExport(): Promise<void> {
+  exporting.value = true
   try {
-    await ElMessageBox.confirm(
-      `导入「${file.name}」将覆盖本机全库数据（含未导出的编辑），是否继续？`,
-      '导入 JSON 备份',
-      { type: 'warning', confirmButtonText: '覆盖导入', cancelButtonText: '取消' }
-    )
+    const data = await exportLedgerJson()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    downloadBlob(blob, `ipqc-ledger-${new Date().toISOString().slice(0, 10)}.json`)
+    ElMessage.success('已从服务器导出台账 JSON')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function openRunDiffs(runId: string): Promise<void> {
+  activeDiffRunId.value = runId
+  diffLoading.value = true
+  try {
+    const data = await listLedgerSyncRunDiffs(runId, { page: 1, pageSize: 50 })
+    syncDiffs.value = data.list
   } catch {
-    input.value = ''
-    return
+    syncDiffs.value = []
+  } finally {
+    diffLoading.value = false
   }
-  const reader = new FileReader()
-  reader.onload = () => {
-    try {
-      store.importFromJson(String(reader.result))
-      ElMessage.success('导入成功，页面数据已更新')
-    } catch {
-      ElMessage.error('文件格式无效，未导入任何数据')
-    }
-  }
-  reader.readAsText(file)
-  input.value = ''
+}
+
+function jumpDiff(row: (typeof syncDiffs.value)[number]): void {
+  if (row.kind === 'unmatched') return
+  const target = diffLinkTarget(row.tableName, row.rowId, row.workshop, row.month)
+  if (!target) return
+  void router.push({ path: target.path, query: target.query })
 }
 
 </script>
@@ -956,6 +1017,9 @@ async function onFile(ev: Event): Promise<void> {
 }
 .sync-runs {
   margin-top: 16px;
+}
+.sync-diffs {
+  margin-top: 12px;
 }
 .sync-runs-table {
   width: 100%;

@@ -1,5 +1,13 @@
 <template>
   <div class="page-scroll">
+    <el-alert
+      v-if="rowMissing"
+      title="该行已删除"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+    />
     <div class="cmp-head">
       <h2>{{ key === '全部' ? '全厂' : key }} · 零件投诉闭环</h2>
       <span class="muted small">
@@ -78,12 +86,13 @@
     </SectionCard>
 
     <SectionCard title="投诉台账（完整闭环字段）" subtitle="可搜索、导出 · 失焦保存">
-      <IpqcEditableTable
+      <IpqcDataGrid
         table-id="cmp"
         unit="批"
         file-base="零件投诉闭环"
         :rows="rows"
         :columns="columns"
+        :row-class="rowFocusClass"
         :page-size="12"
         placeholder="搜索日期 / 来源 / 零件 / 料号 / 问题 / 责任人"
         show-add
@@ -107,8 +116,10 @@ import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcLineChart from '@/components/ipqc-chart/ipqc-line-chart.vue'
 import IpqcHbar from '@/components/ipqc-chart/ipqc-hbar.vue'
 import IpqcDonut from '@/components/ipqc-chart/ipqc-donut.vue'
-import IpqcEditableTable from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
-import type { EditColumn } from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
+import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { useLedgerRowFocus } from '@/composables/use-ledger-row-focus'
+import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import {
   cmpCauseDistribution,
   cmpOwnerLoad,
@@ -121,6 +132,7 @@ import { MONTHS, WORKSHOPS } from '@/domain/ipqc/workshops'
 import { useIpqcStore } from '@/stores/ipqc'
 
 const store = useIpqcStore()
+const { rowMissing, rowFocusClass } = useLedgerRowFocus('cmp')
 const key = computed(() => store.workshop)
 const isAll = computed(() => key.value === '全部')
 const list = computed(() =>
@@ -208,8 +220,8 @@ const columns: EditColumn[] = [
 function persist(): void {
   store.persist()
 }
-function addRow(): void {
-  store.db.cmp.unshift({
+async function addRow(): Promise<void> {
+  const created = await createLedgerTableRow('cmp', {
     date: new Date().toISOString().slice(0, 10),
     from: '',
     dept: key.value === '全部' ? '注塑' : key.value,
@@ -232,9 +244,11 @@ function addRow(): void {
     ontimeClose: '',
     repeat: '否',
   })
+  store.db.cmp.unshift(created as (typeof store.db.cmp)[number])
   store.persist()
 }
-function deleteRow(row: Record<string, unknown>): void {
+async function deleteRow(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('cmp', row)
   const list = store.db.cmp
   const i = list.indexOf(row as unknown as (typeof list)[number])
   if (i < 0) return

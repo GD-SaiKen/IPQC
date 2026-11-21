@@ -168,6 +168,31 @@ export interface LedgerSyncRunListItem {
   diffCount: number
 }
 
+export function listLedgerSyncRunDiffs(
+  runId: string,
+  query?: { page?: number; pageSize?: number },
+): Promise<{
+  list: Array<{
+    id: string
+    tableName: string
+    rowId: string | null
+    field: string
+    shareValue: string
+    gridValue: string
+    kind: string
+    workshop: string | null
+    month: string | null
+  }>
+  total: number
+  page: number
+  pageSize: number
+}> {
+  return request.get(`${BASE}/runs/${encodeURIComponent(runId)}/diffs`, {
+    params: query,
+    requestOptions: { sessionExpiredOn401: false },
+  })
+}
+
 export function listLedgerSyncRuns(query?: {
   page?: number
   pageSize?: number

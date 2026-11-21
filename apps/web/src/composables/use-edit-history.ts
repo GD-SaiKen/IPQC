@@ -22,7 +22,11 @@ export function useEditHistory(tableId: string) {
   function push(entry: Omit<EditEntry, 'tableId'>): void {
     if (String(entry.before ?? '') === String(entry.after ?? '')) return
     stack.value.push({ ...entry, tableId })
-    if (stack.value.length > 120) stack.value.shift()
+    if (stack.value.length > 20) stack.value.shift()
+  }
+
+  function peek(): EditEntry | null {
+    return stack.value.length ? stack.value[stack.value.length - 1] : null
   }
 
   function undo(): EditEntry | null {
@@ -36,5 +40,5 @@ export function useEditHistory(tableId: string) {
     stack.value = []
   }
 
-  return { stack, canUndo, lastLabel, push, undo, clear }
+  return { stack, canUndo, lastLabel, push, peek, undo, clear }
 }

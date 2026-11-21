@@ -1,3 +1,4 @@
+<!-- @deprecated 请使用 ipqc-data-grid -->
 <template>
   <div ref="root" class="et">
     <div class="et-toolbar">
@@ -100,6 +101,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ledgerApiTableFromId } from '@/composables/ledger-table-key'
+import { persistLedgerCell, persistLedgerUndo } from '@/composables/use-ipqc-ledger-save'
 import { useEditHistory } from '@/composables/use-edit-history'
 import { downloadCsv } from '@/composables/use-table-export'
 
@@ -218,7 +221,7 @@ function normalize(col: EditColumn, raw: string): unknown {
   return text
 }
 
-function commitCell(row: Row, col: EditColumn, raw?: string): void {
+async function commitCell(row: Row, col: EditColumn, raw?: string): Promise<void> {
   if (col.readOnly || col.format || col.type === 'select') return
   const k = draftKey(row, col)
   const before = row[col.key]
@@ -226,18 +229,37 @@ function commitCell(row: Row, col: EditColumn, raw?: string): void {
   const value = normalize(col, text)
   delete drafts[k]
   if (String(value ?? '') === String(before ?? '')) return
-  row[col.key] = value
+  const apiTable = ledgerApiTableFromId(props.tableId)
+  if (apiTable) {
+    try {
+      await persistLedgerCell(apiTable, row, col.key, value, before)
+    } catch {
+      return
+    }
+  } else {
+    row[col.key] = value
+  }
   history.push({ row, key: col.key, before, after: value, label: col.label })
   markSaved()
   emit('change', row, col.key, value)
 }
 
-function onSelect(row: Row, col: EditColumn, ev: Event): void {
+async function onSelect(row: Row, col: EditColumn, ev: Event): Promise<void> {
   activeTable = props.tableId
   const before = row[col.key]
   const value = (ev.target as HTMLSelectElement).value
   if (String(value) === String(before ?? '')) return
-  row[col.key] = value
+  const apiTable = ledgerApiTableFromId(props.tableId)
+  if (apiTable) {
+    try {
+      await persistLedgerCell(apiTable, row, col.key, value, before)
+    } catch {
+      ;(ev.target as HTMLSelectElement).value = String(before ?? '')
+      return
+    }
+  } else {
+    row[col.key] = value
+  }
   history.push({ row, key: col.key, before, after: value, label: col.label })
   markSaved()
   emit('change', row, col.key, value)
@@ -364,7 +386,17 @@ function onPaste(ev: ClipboardEvent, ri: number, ci: number): void {
   )
 }
 
-function undoEdit(): void {
+async function undoEdit(): Promise<void> {
+  const pending = history.peek()
+  if (!pending) return
+  const apiTable = ledgerApiTableFromId(props.tableId)
+  if (apiTable) {
+    try {
+      await persistLedgerUndo(apiTable, pending.row, pending.key, pending.before, pending.after)
+    } catch {
+      return
+    }
+  }
   const entry = history.undo()
   if (!entry) return
   delete drafts[`${rowId(entry.row)}:${entry.key}`]

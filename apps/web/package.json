@@ -11,6 +11,8 @@
     "lint": "vue-tsc -b"
   },
   "dependencies": {
+    "@revolist/revogrid": "^4.15.8",
+    "@revolist/vue3-datagrid": "^4.15.8",
     "axios": "^1.7.9",
     "@element-plus/icons-vue": "^2.3.1",
     "element-plus": "^2.9.1",

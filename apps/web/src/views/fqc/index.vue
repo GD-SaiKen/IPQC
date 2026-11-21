@@ -115,7 +115,7 @@
     </div>
 
     <SectionCard title="终检不良明细（NG）" subtitle="可搜索、导出 · 失焦保存">
-      <IpqcEditableTable
+      <IpqcDataGrid
         table-id="fqc-ng"
         unit="批"
         file-base="终检不良明细"
@@ -133,7 +133,7 @@
     </SectionCard>
 
     <SectionCard title="不良品清查记录" subtitle="涉及车间可多值 · 按包含匹配归属">
-      <IpqcEditableTable
+      <IpqcDataGrid
         table-id="fqc-clear"
         unit="条"
         file-base="终检不良清查"
@@ -162,8 +162,9 @@ import { computed } from 'vue'
 import SectionCard from '@/components/section-card/section-card.vue'
 import IpqcComboChart from '@/components/ipqc-chart/ipqc-combo-chart.vue'
 import IpqcParetoChart from '@/components/ipqc-chart/ipqc-pareto-chart.vue'
-import IpqcEditableTable from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
-import type { EditColumn } from '@/components/ipqc-editable-table/ipqc-editable-table.vue'
+import IpqcDataGrid from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import type { EditColumn } from '@/components/ipqc-data-grid/ipqc-data-grid.vue'
+import { createLedgerTableRow, removeLedgerTableRow } from '@/composables/use-ipqc-ledger-save'
 import {
   aggFqc,
   deptsHas,
@@ -278,8 +279,8 @@ const clearColumns: EditColumn[] = [
 function persist(): void {
   store.persist()
 }
-function addNgRow(): void {
-  store.db.fqcNg.unshift({
+async function addNgRow(): Promise<void> {
+  const created = await createLedgerTableRow('fqcNg', {
     ws: key.value === '全部' ? '注塑' : key.value,
     d: new Date().toISOString().slice(0, 10),
     pn: '',
@@ -293,16 +294,18 @@ function addNgRow(): void {
     re: '',
     rd: '',
   })
+  store.db.fqcNg.unshift(created as (typeof store.db.fqcNg)[number])
   store.persist()
 }
-function deleteNgRow(row: Record<string, unknown>): void {
-  const i = store.db.fqcNg.indexOf(row)
+async function deleteNgRow(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('fqcNg', row)
+  const i = store.db.fqcNg.indexOf(row as (typeof store.db.fqcNg)[number])
   if (i < 0) return
   store.db.fqcNg.splice(i, 1)
   store.persist()
 }
-function addClearRow(): void {
-  store.db.fqc.unshift({
+async function addClearRow(): Promise<void> {
+  const created = await createLedgerTableRow('fqc', {
     date: new Date().toISOString().slice(0, 10),
     pn: '',
     part: '',
@@ -314,10 +317,12 @@ function addClearRow(): void {
     note: '',
     action: '',
   })
+  store.db.fqc.unshift(created as (typeof store.db.fqc)[number])
   store.persist()
 }
-function deleteClearRow(row: Record<string, unknown>): void {
-  const i = store.db.fqc.indexOf(row)
+async function deleteClearRow(row: Record<string, unknown>): Promise<void> {
+  await removeLedgerTableRow('fqc', row)
+  const i = store.db.fqc.indexOf(row as (typeof store.db.fqc)[number])
   if (i < 0) return
   store.db.fqc.splice(i, 1)
   store.persist()

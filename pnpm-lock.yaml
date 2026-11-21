@@ -88,6 +88,12 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.1
         version: 2.3.2(vue@3.5.45(typescript@5.7.3))
+      '@revolist/revogrid':
+        specifier: ^4.15.8
+        version: 4.31.8
+      '@revolist/vue3-datagrid':
+        specifier: ^4.15.8
+        version: 4.31.7
       axios:
         specifier: ^1.7.9
         version: 1.21.1
@@ -612,6 +618,15 @@ packages:
 
   '@prisma/get-platform@6.19.3':
     resolution: {integrity: sha512-xFj1VcJ1N3MKooOQAGO0W5tsd0W2QzIvW7DD7c/8H14Zmp4jseeWAITm+w2LLoLrlhoHdPPh0NMZ8mfL6puoHA==}
+
+  '@revolist/revogrid@4.31.7':
+    resolution: {integrity: sha512-6PIf9rufeWVIB4o5DkuSrA6P2gK0MPvrTtxDOHYx1zGCi4bPsHd3RQz+AeuB89MJOqADPXezIJcTAb4waEKCkQ==}
+
+  '@revolist/revogrid@4.31.8':
+    resolution: {integrity: sha512-IkPr4so+k4GjRVccXLdg6o5ReolFS8Y/lBDXsQY3Om+l3I0TOIDoAPWzPthFUqyCBwm4UgVJnmrx08kx7PyIIQ==}
+
+  '@revolist/vue3-datagrid@4.31.7':
+    resolution: {integrity: sha512-qCECSQZ7oJSpDS73hUtUdDzWg5OUgjvvFFClSK0cvKfBFIy9ZLiXy3gGScWCxFOL7yX2rI2KjwXxxL3YFW3/mg==}
 
   '@rollup/rollup-android-arm-eabi@4.68.1':
     resolution: {integrity: sha512-67xgK/taQ7w18anfSxH4dy3RVwiu7GFT8aZglHVUnYisqIe4Qf1xQW7hWxe3lB7R5XSVfPJJKdKP31eGMID2zw==}
@@ -2496,6 +2511,14 @@ snapshots:
   '@prisma/get-platform@6.19.3':
     dependencies:
       '@prisma/debug': 6.19.3
+
+  '@revolist/revogrid@4.31.7': {}
+
+  '@revolist/revogrid@4.31.8': {}
+
+  '@revolist/vue3-datagrid@4.31.7':
+    dependencies:
+      '@revolist/revogrid': 4.31.7
 
   '@rollup/rollup-android-arm-eabi@4.68.1':
     optional: true

@@ -147,6 +147,10 @@ export const request = {
     const res = await client.patch<T>(url, data, mergeOptions(config))
     return res.data
   },
+  async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    const res = await client.put<T>(url, data, mergeOptions(config))
+    return res.data
+  },
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const res = await client.delete<T>(url, mergeOptions(config))
     return res.data

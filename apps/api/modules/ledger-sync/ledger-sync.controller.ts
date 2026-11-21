@@ -26,6 +26,11 @@ export class LedgerSyncController {
     return this.ledgerSync.listShareEntries(user, shareId, query)
   }
 
+  @Post('scope')
+  scope(@CurrentUser() user: AuthUser, @Body() body: LedgerSyncBodyDto) {
+    return this.ledgerSync.scope(user, body)
+  }
+
   @Post('preview')
   preview(@CurrentUser() user: AuthUser, @Body() body: LedgerSyncBodyDto) {
     return this.ledgerSync.preview(user, body)

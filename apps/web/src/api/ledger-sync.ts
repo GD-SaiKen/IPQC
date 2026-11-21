@@ -65,6 +65,25 @@ export function listLedgerShares(): Promise<{
   })
 }
 
+export interface LedgerSelectionScope {
+  expandedTotal: number
+  activeTotal: number
+  excludedTotal: number
+  selectedDirectoryCount: number
+  selectedFileCount: number
+  excludedPathCount: number
+}
+
+export function countLedgerScope(body: {
+  shareId: string
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  excludedPaths?: string[]
+}): Promise<LedgerSelectionScope> {
+  return request.post(`${BASE}/scope`, body, {
+    requestOptions: { showSuccess: false, sessionExpiredOn401: false },
+  })
+}
+
 export function previewLedgerSync(body: {
   shareId: string
   selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>

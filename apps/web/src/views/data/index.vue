@@ -38,9 +38,45 @@
           </div>
         </div>
         <div class="sync-form">
+          <el-button
+            type="primary"
+            :loading="previewing"
+            :disabled="!canRunPreview"
+            @click="onPreviewSync"
+          >
+            核对解析
+          </el-button>
+          <span v-if="savedSelection" class="muted small sync-preview-hint">
+            以下列已保存范围为准，与树上当前勾选无关。
+          </span>
+        </div>
+        <div v-if="savedSelection" class="sync-saved">
+          <h5 class="sync-subtitle">已保存的核对范围</h5>
+          <p class="muted small">
+            共享盘：{{ savedShareLabel }} · 保存于 {{ formatSavedAt(savedSelection.savedAt) }}。
+            <template v-if="savedSelectionScopeLoading">正在统计展开后的文件数…</template>
+            <template v-else-if="savedSelectionScope">
+              已选目录 {{ savedSelectionScope.selectedDirectoryCount }} · 单独勾选文件
+              {{ savedSelectionScope.selectedFileCount }} · 排除项 {{ savedSelectionScope.excludedPathCount }}；
+              展开共 <strong>{{ savedSelectionScope.expandedTotal }}</strong> 个文件，参与核对
+              <strong>{{ savedSelectionScope.activeTotal }}</strong> 个
+              <template v-if="savedSelectionScope.excludedTotal">
+                ，已排除 {{ savedSelectionScope.excludedTotal }} 个
+              </template>
+              。
+            </template>
+            <template v-else-if="savedSelectionScopeError">{{ savedSelectionScopeError }}</template>
+          </p>
+          <LedgerHierarchyTable :rows="savedSelectionRows" mode="selection" />
+        </div>
+        <div v-else-if="dataHubLinked" class="sync-saved sync-saved--empty">
+          <p class="muted small">尚未保存核对范围。请在下方选择共享盘并勾选目录/文件，再点「保存选择」。</p>
+        </div>
+        <h5 class="sync-subtitle">调整文件范围（可选）</h5>
+        <div class="sync-form sync-form--edit">
           <el-select
             v-model="shareId"
-            placeholder="选择已就绪的共享盘"
+            placeholder="选择已就绪的共享盘以浏览目录"
             clearable
             class="sync-share"
           >
@@ -51,10 +87,11 @@
               :value="item.id"
             />
           </el-select>
-          <el-button type="primary" :loading="previewing" :disabled="!shareId || !canPreviewSync" @click="onPreviewSync">
-            核对文件
-          </el-button>
+          <el-button :disabled="!shareId || !canSaveSelection" @click="onSaveSelection">保存选择</el-button>
         </div>
+        <p v-if="selectionDirty && savedSelection" class="muted small sync-dirty-hint">
+          树上勾选与已保存范围不一致；核对解析仍使用上方已保存内容。调整完成后请点「保存选择」。
+        </p>
         <div v-if="shareId" class="sync-tree-wrap">
           <el-tree
             ref="treeRef"
@@ -67,7 +104,7 @@
             @check="onTreeCheck"
           />
           <p class="muted small sync-selection-hint">
-            已选目录 {{ selectedDirectories.length }} · 已选文件 {{ selectedFiles.length }} · 已排除 {{ excludedPaths.length }}
+            树上草稿：已选目录 {{ selectedDirectories.length }} · 已选文件 {{ selectedFiles.length }} · 已排除 {{ excludedPaths.length }}
           </p>
         </div>
         <ul v-if="disabledShares.length" class="sync-hint muted small">
@@ -88,30 +125,7 @@
             <el-radio-button value="unparsed">未解析</el-radio-button>
             <el-radio-button value="problem">存在问题</el-radio-button>
           </el-radio-group>
-          <table class="src-table">
-            <thead>
-              <tr>
-                <th>文件名</th>
-                <th>路径</th>
-                <th>扩展名</th>
-                <th>状态</th>
-                <th>原因</th>
-                <th>角色</th>
-                <th>修改时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="file in filteredPreviewFiles" :key="file.path">
-                <td>{{ file.name }}</td>
-                <td class="file">{{ file.path }}</td>
-                <td class="nowrap">{{ file.extension }}</td>
-                <td class="nowrap">{{ STATUS_LABELS[file.status] ?? file.status }}</td>
-                <td>{{ file.reason || '—' }}</td>
-                <td>{{ file.label || '—' }}</td>
-                <td class="nowrap">{{ file.modifiedAt || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <LedgerHierarchyTable :rows="previewHierarchyRows" mode="preview" />
           <div class="actions" style="margin-top: 12px">
             <el-button
               type="primary"
@@ -174,32 +188,44 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Refresh, SwitchButton } from '@element-plus/icons-vue'
 import type { TreeInstance } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDataHubLinkStatus, startDataHubLink, unlinkDataHubLink } from '@/api/auth'
 import {
+  countLedgerScope,
   listLedgerShares,
   listShareDirectories,
   previewLedgerSync,
   syncLedger,
+  type LedgerSelectionScope,
   type LedgerShareItem,
   type PreviewIssue,
   type PreviewLedgerFile,
   type PreviewSummary,
 } from '@/api/ledger-sync'
 import {
-  STATUS_LABELS,
+  buildPreviewHierarchyRows,
+  buildSavedSelectionRows,
   buildSyncSelection,
   canConfirmSync,
   canPreviewSelection,
   directoryFullyExcluded,
+  filterRedundantFilesUnderDirectories,
   filterPreviewFiles,
+  isSameSelection,
   isUnderPath,
+  latestSavedLedgerSelection,
+  loadLedgerSelection,
+  saveLedgerSelection,
+  splitSelectionPayload,
   type PreviewFilter,
+  type SavedLedgerSelection,
+  type SyncSelectionPayload,
 } from '@/views/data/ledger-selection'
 import { request } from '@/utils/request'
+import LedgerHierarchyTable from '@/components/ledger-hierarchy-table/ledger-hierarchy-table.vue'
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
 import type { CsvColumn } from '@/composables/use-table-export'
@@ -216,13 +242,81 @@ const selectedDirectories = ref<string[]>([])
 const selectedFiles = ref<string[]>([])
 const excludedPaths = ref<string[]>([])
 const previewFilter = ref<PreviewFilter>('all')
+const savedSelection = ref<SavedLedgerSelection | null>(null)
+const savedSelectionScope = ref<LedgerSelectionScope | null>(null)
+const savedSelectionScopeLoading = ref(false)
+const savedSelectionScopeError = ref('')
+const pendingTreeRestore = ref<SyncSelectionPayload | null>(null)
+const restoringTree = ref(false)
 
-watch(shareId, () => {
-  selectedDirectories.value = []
-  selectedFiles.value = []
-  excludedPaths.value = []
-  previewResult.value = null
-  treeRef.value?.setCheckedKeys([])
+function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
+  const split = splitSelectionPayload(payload)
+  selectedDirectories.value = split.directories
+  selectedFiles.value = split.files
+  excludedPaths.value = split.excludedPaths
+}
+
+function restoreTreeSelection(): void {
+  const payload = pendingTreeRestore.value
+  const tree = treeRef.value
+  if (!payload || !tree) {
+    return
+  }
+  restoringTree.value = true
+  try {
+    tree.setCheckedKeys(payload.selectedEntries.map((item) => item.path))
+    for (const excluded of payload.excludedPaths) {
+      const node = tree.getNode(excluded)
+      if (node) {
+        tree.setChecked(excluded, false, false)
+      }
+    }
+    const nodes = tree.getCheckedNodes(false, false) as TreeNodeData[]
+    selectedDirectories.value = nodes.filter((item) => item.kind === 'directory').map((item) => item.path)
+    selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
+  } finally {
+    restoringTree.value = false
+  }
+}
+
+async function refreshSavedSelectionScope(): Promise<void> {
+  savedSelectionScopeError.value = ''
+  if (!savedSelection.value) {
+    savedSelectionScope.value = null
+    return
+  }
+  savedSelectionScopeLoading.value = true
+  try {
+    savedSelectionScope.value = await countLedgerScope({
+      shareId: savedSelection.value.shareId,
+      selectedEntries: savedSelection.value.payload.selectedEntries,
+      excludedPaths: savedSelection.value.payload.excludedPaths,
+    })
+  } catch {
+    savedSelectionScope.value = null
+    savedSelectionScopeError.value = '展开文件数统计失败，请稍后重试或先核对解析。'
+  } finally {
+    savedSelectionScopeLoading.value = false
+  }
+}
+
+watch(shareId, async (next) => {
+  const draft = next ? loadLedgerSelection(next) : null
+  pendingTreeRestore.value = draft?.payload ?? null
+  if (pendingTreeRestore.value) {
+    applyPayloadToTreeState(pendingTreeRestore.value)
+  } else {
+    selectedDirectories.value = []
+    selectedFiles.value = []
+    excludedPaths.value = []
+  }
+  await nextTick()
+  await nextTick()
+  if (pendingTreeRestore.value) {
+    restoreTreeSelection()
+  } else {
+    treeRef.value?.setCheckedKeys([])
+  }
 })
 
 const treeProps = {
@@ -238,17 +332,51 @@ interface TreeNodeData {
   leaf: boolean
 }
 
-const syncPayload = computed(() =>
-  buildSyncSelection({
-    directories: selectedDirectories.value.filter(
-      (dir) => !directoryFullyExcluded(dir, excludedPaths.value, selectedFiles.value),
+const syncPayload = computed(() => {
+  const directories = selectedDirectories.value.filter(
+    (dir) => !directoryFullyExcluded(dir, excludedPaths.value, selectedFiles.value),
+  )
+  return buildSyncSelection({
+    directories,
+    files: filterRedundantFilesUnderDirectories(
+      selectedFiles.value,
+      directories,
+      excludedPaths.value,
     ),
-    files: selectedFiles.value,
     excludedPaths: excludedPaths.value,
-  }),
-)
+  })
+})
 
-const canPreviewSync = computed(() => canPreviewSelection(syncPayload.value))
+const canSaveSelection = computed(() => canPreviewSelection(syncPayload.value))
+const selectionDirty = computed(() => {
+  if (restoringTree.value || !savedSelection.value) {
+    return false
+  }
+  if (shareId.value && savedSelection.value.shareId !== shareId.value) {
+    return false
+  }
+  return !isSameSelection(savedSelection.value.payload, syncPayload.value)
+})
+const canRunPreview = computed(() => {
+  if (!dataHubLinked.value || !savedSelection.value) {
+    return false
+  }
+  if (!canPreviewSelection(savedSelection.value.payload)) {
+    return false
+  }
+  return readyShares.value.some((item) => item.id === savedSelection.value!.shareId)
+})
+const savedShareLabel = computed(() => {
+  const id = savedSelection.value?.shareId
+  if (!id) {
+    return '—'
+  }
+  const match = shares.value.find((item) => item.id === id)
+  return match ? `${match.name}（${match.status}）` : id
+})
+const savedSelectionRows = computed(() =>
+  savedSelection.value ? buildSavedSelectionRows(savedSelection.value.payload) : [],
+)
 
 async function loadTreeNode(
   node: { level: number; data: TreeNodeData },
@@ -278,13 +406,19 @@ async function loadTreeNode(
       shareId.value = ''
     }
   }
+  await nextTick()
+  restoreTreeSelection()
 }
 
 function onTreeCheck(
   data: TreeNodeData,
   state: { checkedKeys: string[]; halfCheckedKeys: string[] },
 ): void {
-  const nodes = (treeRef.value?.getCheckedNodes(false, true) as TreeNodeData[] | undefined) ?? []
+  if (restoringTree.value) {
+    return
+  }
+  pendingTreeRestore.value = null
+  const nodes = (treeRef.value?.getCheckedNodes(false, false) as TreeNodeData[] | undefined) ?? []
   selectedDirectories.value = nodes.filter((item) => item.kind === 'directory').map((item) => item.path)
   selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
 
@@ -319,6 +453,8 @@ const filteredPreviewFiles = computed(() => {
   return filterPreviewFiles(previewResult.value.files, previewFilter.value)
 })
 
+const previewHierarchyRows = computed(() => buildPreviewHierarchyRows(filteredPreviewFiles.value))
+
 const canConfirmPreview = computed(() => {
   if (!previewResult.value) {
     return false
@@ -330,6 +466,19 @@ const readyShares = computed(() => shares.value.filter((item) => item.status ===
 const disabledShares = computed(() =>
   shares.value.filter((item) => item.status !== 'ready' && item.name.trim() !== ''),
 )
+
+function hydrateSavedSelection(): void {
+  const latest = latestSavedLedgerSelection()
+  if (!latest) {
+    savedSelection.value = null
+    return
+  }
+  savedSelection.value = latest
+  if (!shareId.value) {
+    shareId.value = latest.shareId
+  }
+  void refreshSavedSelectionScope()
+}
 
 async function refreshLinkAndShares(): Promise<void> {
   try {
@@ -353,8 +502,12 @@ async function refreshLinkAndShares(): Promise<void> {
   }
 }
 
-onMounted(() => {
-  void refreshLinkAndShares()
+onMounted(async () => {
+  hydrateSavedSelection()
+  await refreshLinkAndShares()
+  if (!savedSelection.value) {
+    hydrateSavedSelection()
+  }
 })
 
 async function onConnectDataHub(): Promise<void> {
@@ -397,21 +550,40 @@ async function onUnlinkDataHub(): Promise<void> {
     selectedFiles.value = []
     excludedPaths.value = []
     previewResult.value = null
+    savedSelection.value = null
+    savedSelectionScope.value = null
+    savedSelectionScopeError.value = ''
     ElMessage.success('已解除 data-hub 连接')
   } finally {
     unlinking.value = false
   }
 }
 
+function formatSavedAt(iso: string): string {
+  return iso.replace('T', ' ').slice(0, 19)
+}
+
+function onSaveSelection(): void {
+  if (!shareId.value || !canSaveSelection.value) {
+    return
+  }
+  savedSelection.value = saveLedgerSelection(shareId.value, syncPayload.value)
+  pendingTreeRestore.value = { ...savedSelection.value.payload }
+  previewResult.value = null
+  void nextTick().then(() => restoreTreeSelection())
+  void refreshSavedSelectionScope()
+  ElMessage.success('已保存当前选择')
+}
+
 async function onPreviewSync(): Promise<void> {
-  if (!shareId.value || !canPreviewSync.value) return
+  if (!canRunPreview.value || !savedSelection.value) return
   previewing.value = true
   previewFilter.value = 'all'
   try {
     previewResult.value = await previewLedgerSync({
-      shareId: shareId.value,
-      selectedEntries: syncPayload.value.selectedEntries,
-      excludedPaths: syncPayload.value.excludedPaths,
+      shareId: savedSelection.value.shareId,
+      selectedEntries: savedSelection.value.payload.selectedEntries,
+      excludedPaths: savedSelection.value.payload.excludedPaths,
     })
   } finally {
     previewing.value = false
@@ -419,7 +591,7 @@ async function onPreviewSync(): Promise<void> {
 }
 
 async function onConfirmSync(): Promise<void> {
-  if (!shareId.value || !previewResult.value) return
+  if (!previewResult.value || !savedSelection.value) return
   try {
     await ElMessageBox.confirm(
       '确认后将以共享盘快照覆盖本机首件、终检、投诉、点检得分与绩效；培训资料 / 记录 / 考核 / 技能矩阵保留。',
@@ -432,9 +604,9 @@ async function onConfirmSync(): Promise<void> {
   syncing.value = true
   try {
     const data = await syncLedger({
-      shareId: shareId.value,
-      selectedEntries: syncPayload.value.selectedEntries,
-      excludedPaths: syncPayload.value.excludedPaths,
+      shareId: savedSelection.value.shareId,
+      selectedEntries: savedSelection.value.payload.selectedEntries,
+      excludedPaths: savedSelection.value.payload.excludedPaths,
       previewFiles: previewResult.value.files.map((file) => ({
         path: file.path,
         modifiedAt: file.modifiedAt,
@@ -718,8 +890,36 @@ async function onReset(): Promise<void> {
   align-items: center;
   margin-top: 10px;
 }
+.sync-form--edit {
+  margin-top: 6px;
+}
+.sync-preview-hint {
+  margin-left: 4px;
+}
+.sync-subtitle {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.sync-subtitle:first-of-type {
+  margin-top: 8px;
+}
 .sync-share {
   width: 260px;
+}
+.sync-saved--empty {
+  padding: 10px 12px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  background: #fff;
+}
+.sync-saved {
+  margin-top: 12px;
+}
+.sync-dirty-hint {
+  margin: 8px 0 0;
+  color: #b45309;
 }
 .sync-tree-wrap {
   margin-top: 10px;

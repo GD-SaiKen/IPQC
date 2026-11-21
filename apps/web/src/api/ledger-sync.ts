@@ -10,17 +10,43 @@ export interface LedgerShareItem {
   status: string
 }
 
-export interface LedgerPreviewFile {
-  role: string
-  label: string
+export interface LedgerShareEntry {
+  name: string
   path: string
+  kind: 'directory' | 'file'
+}
+
+export interface PreviewLedgerFile {
+  path: string
+  name: string
+  extension: string
+  role?: string
+  label?: string
   modifiedAt?: string
+  status: string
+  reason?: string
+}
+
+export interface PreviewIssue {
+  type: string
+  message: string
+  role?: string
+  paths?: string[]
+}
+
+export interface PreviewSummary {
+  total: number
+  parsed: number
+  unparsed: number
+  unsupported: number
+  excluded: number
+  problem: number
 }
 
 export function listShareDirectories(
   shareId: string,
   path = '',
-): Promise<{ list: Array<{ name: string; path: string }> }> {
+): Promise<{ list: LedgerShareEntry[] }> {
   return request.get(`${BASE}/shares/${encodeURIComponent(shareId)}/entries`, {
     params: { path },
     requestOptions: { sessionExpiredOn401: false },
@@ -41,8 +67,15 @@ export function listLedgerShares(): Promise<{
 
 export function previewLedgerSync(body: {
   shareId: string
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  excludedPaths?: string[]
   rootPaths?: string[]
-}): Promise<{ files: LedgerPreviewFile[]; counts: Record<string, number> }> {
+}): Promise<{
+  files: PreviewLedgerFile[]
+  summary: PreviewSummary
+  issues: PreviewIssue[]
+  counts?: Record<string, number>
+}> {
   return request.post(`${BASE}/preview`, body, {
     requestOptions: { showSuccess: false, sessionExpiredOn401: false },
   })
@@ -50,8 +83,12 @@ export function previewLedgerSync(body: {
 
 export function syncLedger(body: {
   shareId: string
+  selectedEntries: Array<{ path: string; kind: 'directory' | 'file' }>
+  excludedPaths?: string[]
+  previewFiles: Array<{ path: string; modifiedAt?: string }>
   rootPaths?: string[]
 }): Promise<{
+  files: PreviewLedgerFile[]
   counts: Record<string, number>
   snapshot: LedgerSnapshot
   checkScores?: CheckScores

@@ -87,7 +87,7 @@ function isFirstArticleName(file: string): boolean {
 
 function isFqcLedger(file: string, workshop: string, options?: { allowBur?: boolean; excludeBur?: boolean }): boolean {
   const bur = options?.allowBur ? '毛边' : ''
-  const pattern = new RegExp(`^2026年${bur}${workshop}车间品质履历表\\.xlsx?$`, 'i')
+  const pattern = new RegExp(`^2026年${bur}${workshop}车间品质履历表\\.(xlsx?|csv)$`, 'i')
   if (!pattern.test(file)) {
     return false
   }
@@ -97,25 +97,121 @@ function isFqcLedger(file: string, workshop: string, options?: { allowBur?: bool
   return true
 }
 
+export const SUPPORTED_FILE_TYPES = ['xls', 'xlsx', 'csv'] as const
+
+export function spreadsheetExtension(name: string): string {
+  const match = name.trim().match(/\.([^.]+)$/i)
+  return match?.[1]?.toLowerCase() ?? ''
+}
+
+export function isSupportedSpreadsheet(name: string): boolean {
+  const ext = spreadsheetExtension(name)
+  return (SUPPORTED_FILE_TYPES as readonly string[]).includes(ext)
+}
+
+export type ClassifyLedgerFileResult =
+  | { kind: 'role'; role: LedgerRole }
+  | { kind: 'unrecognized' }
+  | { kind: 'invalid'; reason: string }
+
+export function classifyLedgerFileName(name: string): ClassifyLedgerFileResult {
+  const file = name.trim()
+  if (/^2026年印刷车间品质履历表\.csv$/i.test(file)) {
+    return { kind: 'invalid', reason: '该角色需要两张工作表' }
+  }
+  const role = matchRole(file)
+  if (role) {
+    return { kind: 'role', role }
+  }
+  return { kind: 'unrecognized' }
+}
+
 function matchRole(name: string): LedgerRole | null {
   const file = name.trim()
-  if (file.includes('100394-003') && /\.xls$/i.test(file)) return 'faFocus'
+  if (file.includes('100394-003') && /\.(xls|xlsx|csv)$/i.test(file)) return 'faFocus'
   if (file.includes('毛边') && isFirstArticleName(file)) return 'faInjectionBur'
   if (file.includes('注塑') && isFirstArticleName(file) && !file.includes('毛边')) return 'faInjection'
   if (file.includes('压铸') && isFirstArticleName(file)) return 'faDiecast'
   if (file.includes('五金') && isFirstArticleName(file)) return 'faHardware'
   if (/^2026年印刷车间品质履历表\.xlsx?$/i.test(file)) return 'printLedger'
-  if (isFqcLedger(file, '注塑毛边', { allowBur: true })) return 'fqcInjectionBur'
+  if (/^2026年注塑毛边车间品质履历表\.(xlsx?|csv)$/i.test(file)) return 'fqcInjectionBur'
   if (isFqcLedger(file, '注塑', { excludeBur: true })) return 'fqcInjection'
   if (isFqcLedger(file, '压铸')) return 'fqcDiecast'
   if (isFqcLedger(file, '五金')) return 'fqcHardware'
   if (isFqcLedger(file, '涂装')) return 'fqcCoating'
-  if (/^2026年不良品清查\.xls$/i.test(file)) return 'fqcInventory'
-  if (/^2026年前制程零件投诉跟进\.xls$/i.test(file)) return 'complaint'
-  if (/^各车间点检评分排名\.xlsx?$/i.test(file)) return 'checkRank'
-  if (/^注塑车间关键点管控\.xlsx?$/i.test(file)) return 'checkStandard'
-  if (/^PQC员工2026年绩效\.xlsx?$/i.test(file)) return 'perf'
+  if (/^2026年不良品清查\.(xls|xlsx|csv)$/i.test(file)) return 'fqcInventory'
+  if (/^2026年前制程零件投诉跟进\.(xls|xlsx|csv)$/i.test(file)) return 'complaint'
+  if (/^各车间点检评分排名\.(xlsx?|csv)$/i.test(file)) return 'checkRank'
+  if (/^注塑车间关键点管控\.(xlsx?|csv)$/i.test(file)) return 'checkStandard'
+  if (/^PQC员工2026年绩效\.(xlsx?|csv)$/i.test(file)) return 'perf'
   return null
+}
+
+export interface AnalyzeSelectedResult {
+  kind: 'ok' | 'blocked'
+  files: MatchedFile[]
+  missingOptional: LedgerRole[]
+  duplicates: Array<{ role: LedgerRole; paths: string[] }>
+  missingRoles: LedgerRole[]
+  unrecognized: SearchHit[]
+  invalid: Array<{ hit: SearchHit; reason: string }>
+}
+
+export function analyzeSelectedLedgerFiles(hits: SearchHit[]): AnalyzeSelectedResult {
+  const byRole = new Map<LedgerRole, SearchHit[]>()
+  const unrecognized: SearchHit[] = []
+  const invalid: Array<{ hit: SearchHit; reason: string }> = []
+
+  for (const hit of hits) {
+    const name = hit.name || basename(hit.path)
+    const classified = classifyLedgerFileName(name)
+    if (classified.kind === 'invalid') {
+      invalid.push({ hit: { ...hit, name }, reason: classified.reason })
+      continue
+    }
+    if (classified.kind === 'unrecognized') {
+      if (isSupportedSpreadsheet(name)) {
+        unrecognized.push({ ...hit, name })
+      }
+      continue
+    }
+    const list = byRole.get(classified.role) ?? []
+    list.push({ ...hit, name })
+    byRole.set(classified.role, list)
+  }
+
+  const duplicates: Array<{ role: LedgerRole; paths: string[] }> = []
+  const files: MatchedFile[] = []
+  for (const [role, list] of byRole) {
+    if (list.length > 1) {
+      duplicates.push({ role, paths: list.map((item) => item.path) })
+      continue
+    }
+    const hit = list[0]!
+    files.push({ role, path: hit.path, name: hit.name || basename(hit.path) })
+  }
+
+  const missingRoles: LedgerRole[] = []
+  const missingOptional: LedgerRole[] = []
+  for (const role of LEDGER_ROLES) {
+    if (byRole.has(role)) continue
+    if (OPTIONAL_LEDGER_ROLES.includes(role)) {
+      missingOptional.push(role)
+      continue
+    }
+    missingRoles.push(role)
+  }
+
+  const blocked = duplicates.length > 0 || missingRoles.length > 0 || invalid.length > 0
+  return {
+    kind: blocked ? 'blocked' : 'ok',
+    files,
+    missingOptional,
+    duplicates,
+    missingRoles,
+    unrecognized,
+    invalid,
+  }
 }
 
 export function validateRootPath(rootPath: string): string | null {

@@ -51,20 +51,24 @@
               :value="item.id"
             />
           </el-select>
-          <el-cascader
-            :key="shareId || 'no-share'"
-            v-model="rootPathPicker"
-            :props="dirCascaderProps"
-            class="sync-path"
-            clearable
-            collapse-tags
-            collapse-tags-tooltip
-            :disabled="!shareId"
-            placeholder="选择台账根目录（可多选，可留空=整盘）"
-          />
-          <el-button type="primary" :loading="previewing" :disabled="!shareId" @click="onPreviewSync">
+          <el-button type="primary" :loading="previewing" :disabled="!shareId || !canPreviewSync" @click="onPreviewSync">
             核对文件
           </el-button>
+        </div>
+        <div v-if="shareId" class="sync-tree-wrap">
+          <el-tree
+            ref="treeRef"
+            :key="shareId"
+            lazy
+            show-checkbox
+            node-key="path"
+            :props="treeProps"
+            :load="loadTreeNode"
+            @check="onTreeCheck"
+          />
+          <p class="muted small sync-selection-hint">
+            已选目录 {{ selectedDirectories.length }} · 已选文件 {{ selectedFiles.length }} · 已排除 {{ excludedPaths.length }}
+          </p>
         </div>
         <ul v-if="disabledShares.length" class="sync-hint muted small">
           <li v-for="item in disabledShares" :key="item.id">
@@ -72,24 +76,51 @@
           </li>
         </ul>
         <div v-if="previewResult" class="sync-preview">
+          <p v-if="previewResult.summary" class="muted small">
+            选中 {{ previewResult.summary.total }} 个文件，已解析 {{ previewResult.summary.parsed }} 个，未解析 {{ previewResult.summary.unparsed }} 个
+          </p>
+          <ul v-if="previewResult.issues.length" class="sync-issues">
+            <li v-for="(issue, index) in previewResult.issues" :key="`${issue.type}-${index}`">{{ issue.message }}</li>
+          </ul>
+          <el-radio-group v-model="previewFilter" size="small" class="sync-filter">
+            <el-radio-button value="all">全部文件</el-radio-button>
+            <el-radio-button value="parsed">将写入本机</el-radio-button>
+            <el-radio-button value="unparsed">未解析</el-radio-button>
+            <el-radio-button value="problem">存在问题</el-radio-button>
+          </el-radio-group>
           <table class="src-table">
             <thead>
               <tr>
-                <th>角色</th>
+                <th>文件名</th>
                 <th>路径</th>
-                <th>将写入条数（合计）</th>
+                <th>扩展名</th>
+                <th>状态</th>
+                <th>原因</th>
+                <th>角色</th>
+                <th>修改时间</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="file in previewResult.files" :key="file.path">
-                <td>{{ file.label }}</td>
+              <tr v-for="file in filteredPreviewFiles" :key="file.path">
+                <td>{{ file.name }}</td>
                 <td class="file">{{ file.path }}</td>
-                <td class="nowrap">{{ formatPreviewCounts(file.role) }}</td>
+                <td class="nowrap">{{ file.extension }}</td>
+                <td class="nowrap">{{ STATUS_LABELS[file.status] ?? file.status }}</td>
+                <td>{{ file.reason || '—' }}</td>
+                <td>{{ file.label || '—' }}</td>
+                <td class="nowrap">{{ file.modifiedAt || '—' }}</td>
               </tr>
             </tbody>
           </table>
           <div class="actions" style="margin-top: 12px">
-            <el-button type="primary" :loading="syncing" @click="onConfirmSync">确认写入本机</el-button>
+            <el-button
+              type="primary"
+              :loading="syncing"
+              :disabled="!canConfirmPreview"
+              @click="onConfirmSync"
+            >
+              确认写入本机
+            </el-button>
             <el-button @click="previewResult = null">取消</el-button>
           </div>
         </div>
@@ -145,7 +176,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Refresh, SwitchButton } from '@element-plus/icons-vue'
-import type { CascaderProps, CascaderOption } from 'element-plus'
+import type { TreeInstance } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDataHubLinkStatus, startDataHubLink, unlinkDataHubLink } from '@/api/auth'
 import {
@@ -154,7 +185,20 @@ import {
   previewLedgerSync,
   syncLedger,
   type LedgerShareItem,
+  type PreviewIssue,
+  type PreviewLedgerFile,
+  type PreviewSummary,
 } from '@/api/ledger-sync'
+import {
+  STATUS_LABELS,
+  buildSyncSelection,
+  canConfirmSync,
+  canPreviewSelection,
+  directoryFullyExcluded,
+  filterPreviewFiles,
+  isUnderPath,
+  type PreviewFilter,
+} from '@/views/data/ledger-selection'
 import { request } from '@/utils/request'
 import SectionCard from '@/components/section-card/section-card.vue'
 import { downloadBlob, downloadCsv } from '@/composables/use-table-export'
@@ -167,49 +211,94 @@ const store = useIpqcStore()
 const fileRef = ref<HTMLInputElement | null>(null)
 const shares = ref<LedgerShareItem[]>([])
 const shareId = ref('')
-const rootPaths = ref<string[]>([])
-const rootPathPicker = ref<string[][]>([])
+const treeRef = ref<TreeInstance>()
+const selectedDirectories = ref<string[]>([])
+const selectedFiles = ref<string[]>([])
+const excludedPaths = ref<string[]>([])
+const previewFilter = ref<PreviewFilter>('all')
 
 watch(shareId, () => {
-  rootPathPicker.value = []
-  rootPaths.value = []
+  selectedDirectories.value = []
+  selectedFiles.value = []
+  excludedPaths.value = []
+  previewResult.value = null
+  treeRef.value?.setCheckedKeys([])
 })
 
-watch(rootPathPicker, (selections) => {
-  rootPaths.value = selections.map((segments) => segments.join('/')).filter(Boolean)
-})
+const treeProps = {
+  label: 'label',
+  isLeaf: 'leaf',
+}
 
-const dirCascaderProps: CascaderProps = {
-  lazy: true,
-  multiple: true,
-  checkStrictly: true,
-  emitPath: true,
-  async lazyLoad(node, resolve) {
-    if (!shareId.value) {
-      resolve([])
-      return
+interface TreeNodeData {
+  path: string
+  name: string
+  kind: 'directory' | 'file'
+  label: string
+  leaf: boolean
+}
+
+const syncPayload = computed(() =>
+  buildSyncSelection({
+    directories: selectedDirectories.value.filter(
+      (dir) => !directoryFullyExcluded(dir, excludedPaths.value, selectedFiles.value),
+    ),
+    files: selectedFiles.value,
+    excludedPaths: excludedPaths.value,
+  }),
+)
+
+const canPreviewSync = computed(() => canPreviewSelection(syncPayload.value))
+
+async function loadTreeNode(
+  node: { level: number; data: TreeNodeData },
+  resolve: (data: TreeNodeData[]) => void,
+): Promise<void> {
+  if (!shareId.value) {
+    resolve([])
+    return
+  }
+  const parentPath = node.level === 0 ? '' : node.data.path
+  try {
+    const data = await listShareDirectories(shareId.value, parentPath)
+    resolve(
+      (data.list ?? []).map((item) => ({
+        path: item.path,
+        name: item.name,
+        kind: item.kind,
+        label: item.kind === 'directory' ? item.name : item.name,
+        leaf: item.kind === 'file',
+      })),
+    )
+  } catch (error) {
+    resolve([])
+    if (request.isDataHubUnauthorized(error)) {
+      dataHubLinked.value = false
+      shares.value = []
+      shareId.value = ''
     }
-    const parentPath =
-      node.level === 0 ? '' : String((node.data as { fullPath?: string }).fullPath ?? '')
-    try {
-      const data = await listShareDirectories(shareId.value, parentPath)
-      const list = data.list ?? []
-      const options: CascaderOption[] = list.map((item) => ({
-        value: item.name,
-        label: item.name,
-        leaf: false,
-        fullPath: item.path,
-      }))
-      resolve(options)
-    } catch (error) {
-      resolve([])
-      if (request.isDataHubUnauthorized(error)) {
-        dataHubLinked.value = false
-        shares.value = []
-        shareId.value = ''
-      }
+  }
+}
+
+function onTreeCheck(
+  data: TreeNodeData,
+  state: { checkedKeys: string[]; halfCheckedKeys: string[] },
+): void {
+  const nodes = (treeRef.value?.getCheckedNodes(false, true) as TreeNodeData[] | undefined) ?? []
+  selectedDirectories.value = nodes.filter((item) => item.kind === 'directory').map((item) => item.path)
+  selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
+
+  if (data.kind === 'file' && !state.checkedKeys.includes(data.path)) {
+    if (selectedDirectories.value.some((dir) => isUnderPath(data.path, dir))) {
+      excludedPaths.value = [...new Set([...excludedPaths.value, data.path])]
     }
-  },
+  }
+  if (data.kind === 'file' && state.checkedKeys.includes(data.path)) {
+    excludedPaths.value = excludedPaths.value.filter((path) => path !== data.path)
+  }
+  if (data.kind === 'directory' && !state.checkedKeys.includes(data.path)) {
+    excludedPaths.value = excludedPaths.value.filter((path) => !isUnderPath(path, data.path))
+  }
 }
 const previewing = ref(false)
 const syncing = ref(false)
@@ -217,9 +306,25 @@ const dataHubLinked = ref(false)
 const linking = ref(false)
 const unlinking = ref(false)
 const previewResult = ref<{
-  files: Array<{ role: string; label: string; path: string; modifiedAt?: string }>
-  counts: Record<string, number>
+  files: PreviewLedgerFile[]
+  summary: PreviewSummary
+  issues: PreviewIssue[]
+  counts?: Record<string, number>
 } | null>(null)
+
+const filteredPreviewFiles = computed(() => {
+  if (!previewResult.value) {
+    return []
+  }
+  return filterPreviewFiles(previewResult.value.files, previewFilter.value)
+})
+
+const canConfirmPreview = computed(() => {
+  if (!previewResult.value) {
+    return false
+  }
+  return canConfirmSync(previewResult.value.issues, previewResult.value.files)
+})
 
 const readyShares = computed(() => shares.value.filter((item) => item.status === 'ready'))
 const disabledShares = computed(() =>
@@ -288,8 +393,9 @@ async function onUnlinkDataHub(): Promise<void> {
     dataHubLinked.value = false
     shares.value = []
     shareId.value = ''
-    rootPathPicker.value = []
-    rootPaths.value = []
+    selectedDirectories.value = []
+    selectedFiles.value = []
+    excludedPaths.value = []
     previewResult.value = null
     ElMessage.success('已解除 data-hub 连接')
   } finally {
@@ -297,19 +403,15 @@ async function onUnlinkDataHub(): Promise<void> {
   }
 }
 
-function formatPreviewCounts(_role: string): string {
-  if (!previewResult.value) return '—'
-  const c = previewResult.value.counts
-  return `首件 ${c.fa ?? 0} · 终检明细 ${c.fqcNg ?? 0} · 清查 ${c.fqc ?? 0} · 投诉 ${c.cmp ?? 0} · 绩效 ${c.perf ?? 0}`
-}
-
 async function onPreviewSync(): Promise<void> {
-  if (!shareId.value) return
+  if (!shareId.value || !canPreviewSync.value) return
   previewing.value = true
+  previewFilter.value = 'all'
   try {
     previewResult.value = await previewLedgerSync({
       shareId: shareId.value,
-      rootPaths: rootPaths.value.length > 0 ? rootPaths.value : undefined,
+      selectedEntries: syncPayload.value.selectedEntries,
+      excludedPaths: syncPayload.value.excludedPaths,
     })
   } finally {
     previewing.value = false
@@ -331,7 +433,12 @@ async function onConfirmSync(): Promise<void> {
   try {
     const data = await syncLedger({
       shareId: shareId.value,
-      rootPaths: rootPaths.value.length > 0 ? rootPaths.value : undefined,
+      selectedEntries: syncPayload.value.selectedEntries,
+      excludedPaths: syncPayload.value.excludedPaths,
+      previewFiles: previewResult.value.files.map((file) => ({
+        path: file.path,
+        modifiedAt: file.modifiedAt,
+      })),
     })
     store.db = mergeLedgerSnapshot(store.db, data.snapshot)
     if (data.checkScores) {
@@ -614,9 +721,26 @@ async function onReset(): Promise<void> {
 .sync-share {
   width: 260px;
 }
-.sync-path {
-  width: min(360px, 100%);
-  flex: 1;
+.sync-tree-wrap {
+  margin-top: 10px;
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.sync-selection-hint {
+  margin: 8px 0 0;
+}
+.sync-issues {
+  margin: 10px 0;
+  padding-left: 18px;
+  color: #b45309;
+  font-size: 12px;
+}
+.sync-filter {
+  margin: 10px 0;
 }
 .sync-hint {
   margin: 10px 0 0;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { matchLedgerFiles, validateRootPath } from '../../../modules/ledger-sync/match-files'
+import {
+  analyzeSelectedLedgerFiles,
+  classifyLedgerFileName,
+  matchLedgerFiles,
+  validateRootPath,
+} from '../../../modules/ledger-sync/match-files'
 
 function allRequiredHits(): Array<{ path: string; name: string }> {
   return [
@@ -62,13 +67,10 @@ describe('matchLedgerFiles', () => {
     expect(result.kind).toBe('ok')
   })
 
-  it('缺少注塑毛边终检表仍成功', () => {
+  it('缺少注塑毛边终检表时拒绝', () => {
     const hits = allRequiredHits().filter((h) => !h.name.includes('注塑毛边车间品质履历'))
     const result = matchLedgerFiles(hits)
-    expect(result.kind).toBe('ok')
-    if (result.kind === 'ok') {
-      expect(result.missingOptional).toContain('fqcInjectionBur')
-    }
+    expect(result.kind).toBe('reject')
   })
 
   it('多选偏好目录时优先落在其中的副本', () => {
@@ -104,5 +106,44 @@ describe('matchLedgerFiles', () => {
   it('毛边首件缺失仍成功', () => {
     const result = matchLedgerFiles(allRequiredHits())
     expect(result.kind).toBe('ok')
+  })
+})
+
+describe('analyzeSelectedLedgerFiles', () => {
+  it('同一角色两份文件全部视为重复', () => {
+    const hits = [
+      { path: '2024/2026年涂装车间品质履历表.xlsx', name: '2026年涂装车间品质履历表.xlsx' },
+      { path: '2026/2026年涂装车间品质履历表.xlsx', name: '2026年涂装车间品质履历表.xlsx' },
+    ]
+    const result = analyzeSelectedLedgerFiles(hits)
+    expect(result.duplicates).toHaveLength(1)
+    expect(result.files).toHaveLength(0)
+    expect(result.kind).toBe('blocked')
+  })
+
+  it('.XLS 与 .csv 文件名可识别', () => {
+    expect(classifyLedgerFileName('100394-003首巡检报告.XLS')).toEqual({
+      kind: 'role',
+      role: 'faFocus',
+    })
+    expect(classifyLedgerFileName('2026年前制程零件投诉跟进.csv')).toEqual({
+      kind: 'role',
+      role: 'complaint',
+    })
+    expect(classifyLedgerFileName('2026年印刷车间品质履历表.csv')).toEqual({
+      kind: 'invalid',
+      reason: '该角色需要两张工作表',
+    })
+  })
+
+  it('毛边首件缺失仍成功，毛边终检缺失则拒绝', () => {
+    const hits = allRequiredHits()
+    const ok = analyzeSelectedLedgerFiles(hits)
+    expect(ok.missingOptional).toContain('faInjectionBur')
+    expect(ok.missingRoles).not.toContain('faInjectionBur')
+
+    const withoutBurFqc = hits.filter((h) => !h.name.includes('注塑毛边车间品质履历'))
+    const blocked = analyzeSelectedLedgerFiles(withoutBurFqc)
+    expect(blocked.missingRoles).toContain('fqcInjectionBur')
   })
 })

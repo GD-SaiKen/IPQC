@@ -154,5 +154,12 @@ describe('ledger-selection', () => {
     expect(filterPreviewFiles(files, 'problem')).toHaveLength(1)
     expect(canConfirmSync([{ type: 'duplicate', message: '重复' }], files)).toBe(false)
     expect(canConfirmSync([], [{ path: 'a', name: 'a', extension: 'xls', status: 'parsed' }])).toBe(true)
+    expect(
+      canConfirmSync(
+        [{ type: 'missing_role', message: '未包含注塑首件' }],
+        [{ path: 'a', name: 'a', extension: 'xls', status: 'parsed' }],
+      ),
+    ).toBe(true)
+    expect(canConfirmSync([], [])).toBe(false)
   })
 })

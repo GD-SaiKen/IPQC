@@ -429,13 +429,13 @@ export function filterPreviewFiles(files: PreviewLedgerFile[], filter: PreviewFi
 }
 
 export function canConfirmSync(issues: PreviewIssue[], files: PreviewLedgerFile[]): boolean {
-  if (issues.some((issue) => ['missing_role', 'duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type))) {
+  if (issues.some((issue) => ['duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type))) {
     return false
   }
   if (files.some((file) => file.status === 'duplicate' || file.status === 'invalid')) {
     return false
   }
-  return true
+  return files.some((file) => file.status === 'parsed')
 }
 
 export const STATUS_LABELS: Record<string, string> = {

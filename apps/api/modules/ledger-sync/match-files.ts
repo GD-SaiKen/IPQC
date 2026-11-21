@@ -13,7 +13,12 @@ export interface MatchedFile {
 }
 
 export type MatchFilesResult =
-  | { kind: 'ok'; files: MatchedFile[]; missingOptional: LedgerRole[] }
+  | {
+      kind: 'ok'
+      files: MatchedFile[]
+      missingOptional: LedgerRole[]
+      missingRoles: LedgerRole[]
+    }
   | { kind: 'reject'; message: string; conflicts?: Array<{ role: LedgerRole; paths: string[] }> }
 
 function basename(path: string): string {
@@ -202,7 +207,7 @@ export function analyzeSelectedLedgerFiles(hits: SearchHit[]): AnalyzeSelectedRe
     missingRoles.push(role)
   }
 
-  const blocked = duplicates.length > 0 || missingRoles.length > 0 || invalid.length > 0
+  const blocked = duplicates.length > 0 || invalid.length > 0
   return {
     kind: blocked ? 'blocked' : 'ok',
     files,
@@ -273,7 +278,7 @@ export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOp
     }
   }
 
-  const missing: string[] = []
+  const missingRoles: LedgerRole[] = []
   const missingOptional: LedgerRole[] = []
   for (const role of LEDGER_ROLES) {
     if (byRole.has(role)) continue
@@ -281,16 +286,7 @@ export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOp
       missingOptional.push(role)
       continue
     }
-    missing.push(role)
-  }
-  if (missing.length > 0) {
-    const rootHint = preferRootPaths?.length
-      ? `已在全共享盘搜索；若仍缺项，请确认共享盘内是否存在对应 Excel，或检查 data-hub 检索是否命中。`
-      : `请确认共享盘内文件名与规格一致（如「100394-003首巡检报告.xls」「2026年注塑车间品质履历表.xlsx」）。`
-    return {
-      kind: 'reject',
-      message: `缺少必需台账文件（角色：${missing.join('、')}）。${rootHint}`,
-    }
+    missingRoles.push(role)
   }
 
   const files: MatchedFile[] = []
@@ -299,5 +295,15 @@ export function matchLedgerFiles(hits: SearchHit[], options?: MatchLedgerFilesOp
     files.push({ role, path: hit.path, name: hit.name || basename(hit.path) })
   }
 
-  return { kind: 'ok', files, missingOptional }
+  if (files.length === 0) {
+    const rootHint = preferRootPaths?.length
+      ? '请确认共享盘内是否存在对应 Excel，或检查 data-hub 检索是否命中。'
+      : '请确认共享盘内文件名与规格一致（如「100394-003首巡检报告.xls」「2026年注塑车间品质履历表.xlsx」）。'
+    return {
+      kind: 'reject',
+      message: `未识别到可同步的台账文件。${rootHint}`,
+    }
+  }
+
+  return { kind: 'ok', files, missingOptional, missingRoles }
 }

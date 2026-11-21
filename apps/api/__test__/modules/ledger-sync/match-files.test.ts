@@ -43,10 +43,14 @@ describe('matchLedgerFiles', () => {
     }
   })
 
-  it('缺终检时拒绝', () => {
+  it('缺部分台账时仍成功并列出缺项', () => {
     const hits = allRequiredHits().filter((h) => !h.name.includes('涂装'))
     const result = matchLedgerFiles(hits)
-    expect(result).toEqual({ kind: 'reject', message: expect.stringContaining('缺少必需台账文件') })
+    expect(result.kind).toBe('ok')
+    if (result.kind === 'ok') {
+      expect(result.missingRoles).toContain('fqcCoating')
+      expect(result.files.length).toBeGreaterThan(0)
+    }
   })
 
   it('重名时拒绝', () => {
@@ -67,10 +71,13 @@ describe('matchLedgerFiles', () => {
     expect(result.kind).toBe('ok')
   })
 
-  it('缺少注塑毛边终检表时拒绝', () => {
+  it('缺少注塑毛边终检表时仍成功并记入缺项', () => {
     const hits = allRequiredHits().filter((h) => !h.name.includes('注塑毛边车间品质履历'))
     const result = matchLedgerFiles(hits)
-    expect(result.kind).toBe('reject')
+    expect(result.kind).toBe('ok')
+    if (result.kind === 'ok') {
+      expect(result.missingRoles).toContain('fqcInjectionBur')
+    }
   })
 
   it('多选偏好目录时优先落在其中的副本', () => {
@@ -136,14 +143,15 @@ describe('analyzeSelectedLedgerFiles', () => {
     })
   })
 
-  it('毛边首件缺失仍成功，毛边终检缺失则拒绝', () => {
+  it('毛边首件缺失仍成功，毛边终检缺失仅记入缺项', () => {
     const hits = allRequiredHits()
     const ok = analyzeSelectedLedgerFiles(hits)
     expect(ok.missingOptional).toContain('faInjectionBur')
     expect(ok.missingRoles).not.toContain('faInjectionBur')
 
     const withoutBurFqc = hits.filter((h) => !h.name.includes('注塑毛边车间品质履历'))
-    const blocked = analyzeSelectedLedgerFiles(withoutBurFqc)
-    expect(blocked.missingRoles).toContain('fqcInjectionBur')
+    const partial = analyzeSelectedLedgerFiles(withoutBurFqc)
+    expect(partial.kind).toBe('ok')
+    expect(partial.missingRoles).toContain('fqcInjectionBur')
   })
 })

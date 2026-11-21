@@ -268,8 +268,7 @@ export class LedgerSyncService {
     const canLoad =
       analysis.files.length > 0 &&
       analysis.duplicates.length === 0 &&
-      analysis.invalid.length === 0 &&
-      analysis.missingRoles.length === 0
+      analysis.invalid.length === 0
 
     if (canLoad) {
       const loaded = await this.loadMatchedWorkbooks(body.shareId, accessToken, analysis.files)

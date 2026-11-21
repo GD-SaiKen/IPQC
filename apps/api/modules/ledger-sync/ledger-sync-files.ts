@@ -143,7 +143,7 @@ export function buildLedgerFileRecords(input: {
     issues.push({
       type: 'missing_role',
       role,
-      message: `缺少必需台账：${LEDGER_ROLE_LABELS[role]}`,
+      message: `核对范围内未包含：${LEDGER_ROLE_LABELS[role]}（缺项不阻止同步）`,
     })
   }
 
@@ -251,7 +251,7 @@ export function summarizeLedgerFiles(files: LedgerFileRecord[], issues: LedgerIs
 
 export function hasBlockingIssues(issues: LedgerIssue[]): boolean {
   return issues.some((issue) =>
-  ['missing_role', 'duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type),
+    ['duplicate', 'invalid', 'column_mismatch', 'read_failed'].includes(issue.type),
   )
 }
 

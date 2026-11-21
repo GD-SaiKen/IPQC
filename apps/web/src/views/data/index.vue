@@ -202,6 +202,12 @@
           <p v-if="previewResult.summary" class="muted small">
             选中 {{ previewResult.summary.total }} 个文件，已解析 {{ previewResult.summary.parsed }} 个，未解析 {{ previewResult.summary.unparsed }} 个
           </p>
+          <p
+            v-if="previewResult.issues.some((issue) => issue.type === 'missing_role')"
+            class="muted small sync-selection-hint"
+          >
+            核对范围内缺少部分台账文件时，仍可同步已解析的文件；缺项仅作提示。
+          </p>
           <ul v-if="previewResult.issues.length" class="sync-issues">
             <li v-for="(issue, index) in previewResult.issues" :key="`${issue.type}-${index}`">{{ issue.message }}</li>
           </ul>

@@ -218,6 +218,104 @@ export async function searchLedgerPaths(
   return hits
 }
 
+const TABLE_PAGE_SIZE = 100
+
+interface TableManifestResponse {
+  path: string
+  sheets: Array<{ name: string; totalRows: number; totalColumns: number }>
+  warnings?: string[]
+}
+
+interface TablePageResponse {
+  path: string
+  sheet: string
+  list: string[][]
+  total: number
+  page: number
+  pageSize: number
+}
+
+function dataHubErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') {
+    return 'data-hub 请求失败'
+  }
+  const row = payload as Record<string, unknown>
+  if (typeof row.message === 'string' && row.message.trim()) {
+    return row.message
+  }
+  if (typeof row.msg === 'string' && row.msg.trim()) {
+    return row.msg
+  }
+  if ('data' in row) {
+    return dataHubErrorMessage(row.data)
+  }
+  return 'data-hub 请求失败'
+}
+
+async function fetchShareTableManifest(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  fetchFn: FetchLike,
+): Promise<TableManifestResponse> {
+  const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/table`, apiOrigin)
+  url.searchParams.set('path', path)
+  const response = await fetchFn(url, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  const body = await response.json()
+  if (!response.ok) {
+    throw new DataHubRequestError(response.status, body)
+  }
+  return parseEnvelope<TableManifestResponse>(body)
+}
+
+async function fetchShareTablePage(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  sheet: string,
+  page: number,
+  fetchFn: FetchLike,
+): Promise<TablePageResponse> {
+  const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/table`, apiOrigin)
+  url.searchParams.set('path', path)
+  url.searchParams.set('sheet', sheet)
+  url.searchParams.set('page', String(page))
+  url.searchParams.set('pageSize', String(TABLE_PAGE_SIZE))
+  const response = await fetchFn(url, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  const body = await response.json()
+  if (!response.ok) {
+    throw new DataHubRequestError(response.status, body)
+  }
+  return parseEnvelope<TablePageResponse>(body)
+}
+
+async function fetchShareFileModifiedAt(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  fetchFn: FetchLike,
+): Promise<string | undefined> {
+  const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/metadata`, apiOrigin)
+  url.searchParams.set('path', path)
+  const response = await fetchFn(url, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    return undefined
+  }
+  const body = await response.json()
+  const data = parseEnvelope<{ modifiedAt?: string | null }>(body)
+  return data.modifiedAt ?? undefined
+}
+
+/** 通过 data-hub `/table` 投影分页读取，组装与映射层一致的 workbook 结构 */
 export async function fetchWorkbook(
   apiOrigin: string,
   accessToken: string,
@@ -225,19 +323,44 @@ export async function fetchWorkbook(
   path: string,
   fetchFn: FetchLike,
 ): Promise<DataHubWorkbook> {
-  const url = new URL(`/api/shares/${shareId}/workbook`, apiOrigin)
-  url.searchParams.set('path', path)
-  const response = await fetchFn(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  const body = await response.json()
-  if (response.status === 404) {
-    throw new DataHubRequestError(404, body)
+  const [modifiedAt, manifest] = await Promise.all([
+    fetchShareFileModifiedAt(apiOrigin, accessToken, shareId, path, fetchFn),
+    fetchShareTableManifest(apiOrigin, accessToken, shareId, path, fetchFn),
+  ])
+
+  const sheets: DataHubWorkbook['sheets'] = []
+  for (const meta of manifest.sheets) {
+    const rows: string[][] = []
+    if (meta.totalRows > 0) {
+      let page = 1
+      while (rows.length < meta.totalRows) {
+        const chunk = await fetchShareTablePage(
+          apiOrigin,
+          accessToken,
+          shareId,
+          path,
+          meta.name,
+          page,
+          fetchFn,
+        )
+        if (!chunk.list.length) {
+          break
+        }
+        rows.push(...chunk.list)
+        if (rows.length >= chunk.total || chunk.list.length < TABLE_PAGE_SIZE) {
+          break
+        }
+        page += 1
+      }
+    }
+    sheets.push({ name: meta.name, rows })
   }
-  if (!response.ok) {
-    throw new DataHubRequestError(response.status, body)
+
+  return {
+    path: manifest.path,
+    modifiedAt,
+    sheets,
   }
-  return parseEnvelope<DataHubWorkbook>(body)
 }
 
 export class DataHubRequestError extends Error {
@@ -245,14 +368,7 @@ export class DataHubRequestError extends Error {
   readonly payload: unknown
 
   constructor(status: number, payload: unknown) {
-    const message =
-      payload &&
-      typeof payload === 'object' &&
-      'message' in payload &&
-      typeof (payload as { message: string }).message === 'string'
-        ? (payload as { message: string }).message
-        : 'data-hub 请求失败'
-    super(message)
+    super(dataHubErrorMessage(payload))
     this.status = status
     this.payload = payload
   }
@@ -268,9 +384,6 @@ export function mapDataHubError(error: unknown): { status: number; message: stri
     }
     if (error.status === 400 && error.message.includes('表格')) {
       return { status: 400, message: error.message }
-    }
-    if (error.status === 404 && String(error.message).includes('workbook')) {
-      return { status: 400, message: 'data-hub 尚未提供表格读取' }
     }
     return { status: 400, message: error.message }
   }

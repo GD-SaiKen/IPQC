@@ -1,5 +1,3 @@
-export const MAX_LEDGER_CANDIDATES = 2000
-
 export interface FileCandidate {
   path: string
   name: string
@@ -97,12 +95,6 @@ export function dedupeCandidates(candidates: FileCandidate[]): FileCandidate[] {
     })
   }
   return output
-}
-
-export function assertCandidateLimit(candidates: FileCandidate[]): void {
-  if (candidates.length > MAX_LEDGER_CANDIDATES) {
-    throw new Error(`选中文件超过 ${MAX_LEDGER_CANDIDATES} 个，请缩小选择范围`)
-  }
 }
 
 export function applyExclusions(

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  assertCandidateLimit,
   applyExclusions,
   dedupeCandidates,
   normalizeLedgerPath,
@@ -56,11 +55,4 @@ describe('select-files', () => {
     expect(result.excluded).toHaveLength(0)
   })
 
-  it('超过 2000 个文件拒绝', () => {
-    const files = Array.from({ length: 2001 }, (_, i) => ({
-      path: `f/${i}.xls`,
-      name: `${i}.xls`,
-    }))
-    expect(() => assertCandidateLimit(files)).toThrow(/2000/)
-  })
 })

@@ -30,7 +30,6 @@ import { mapWorkbooksToSnapshot } from './map-workbook'
 import type { LedgerRole } from './ledger-roles'
 import {
   applyExclusions,
-  assertCandidateLimit,
   dedupeCandidates,
   normalizeLedgerPath,
   validateEntryPath,
@@ -85,6 +84,26 @@ export class LedgerSyncService {
         path: item.path,
         kind: item.kind,
       })),
+    }
+  }
+
+  async scope(user: AuthUser, body: LedgerSyncBodyDto) {
+    if (!this.usesNewSelection(body)) {
+      throw apiError(400, '请选择要核对的目录或文件', 'bad_request')
+    }
+    this.assertNewSelectionBody(body)
+    const accessToken = await this.auth.getDataHubAccessToken(user.id)
+    await this.resolveReadyShare(user, body.shareId, accessToken)
+    const { all, active, excluded } = await this.resolveSelectionCandidates(body, accessToken)
+    const directories = (body.selectedEntries ?? []).filter((entry) => entry.kind === 'directory').length
+    const pinnedFiles = (body.selectedEntries ?? []).filter((entry) => entry.kind === 'file').length
+    return {
+      expandedTotal: all.length,
+      activeTotal: active.length,
+      excludedTotal: excluded.length,
+      selectedDirectoryCount: directories,
+      selectedFileCount: pinnedFiles,
+      excludedPathCount: body.excludedPaths?.length ?? 0,
     }
   }
 
@@ -206,28 +225,7 @@ export class LedgerSyncService {
     includeSnapshot: boolean,
   ) {
     void user
-    const allCandidates = await this.expandSelectedEntries(body, accessToken)
-    try {
-      assertCandidateLimit(allCandidates)
-    } catch (error) {
-      throw apiError(
-        400,
-        error instanceof Error ? error.message : '选中文件过多',
-        'bad_request',
-      )
-    }
-    const selectedDirectories = (body.selectedEntries ?? [])
-      .filter((entry) => entry.kind === 'directory')
-      .map((entry) => normalizeLedgerPath(entry.path))
-    const pinnedFiles = (body.selectedEntries ?? [])
-      .filter((entry) => entry.kind === 'file')
-      .map((entry) => normalizeLedgerPath(entry.path))
-    const excludedPaths = (body.excludedPaths ?? []).map((path) => normalizeLedgerPath(path))
-    const { active, excluded } = applyExclusions(allCandidates, {
-      selectedDirectories,
-      pinnedFiles,
-      excludedPaths,
-    })
+    const { active, excluded } = await this.resolveSelectionCandidates(body, accessToken)
     let { files, analysis, issues } = buildLedgerFileRecords({ active, excluded })
 
     let counts: Record<string, number> | undefined
@@ -296,6 +294,26 @@ export class LedgerSyncService {
       snapshot,
       checkScores,
     }
+  }
+
+  private async resolveSelectionCandidates(
+    body: LedgerSyncBodyDto,
+    accessToken: string,
+  ): Promise<{ all: FileCandidate[]; active: FileCandidate[]; excluded: FileCandidate[] }> {
+    const allCandidates = await this.expandSelectedEntries(body, accessToken)
+    const selectedDirectories = (body.selectedEntries ?? [])
+      .filter((entry) => entry.kind === 'directory')
+      .map((entry) => normalizeLedgerPath(entry.path))
+    const pinnedFiles = (body.selectedEntries ?? [])
+      .filter((entry) => entry.kind === 'file')
+      .map((entry) => normalizeLedgerPath(entry.path))
+    const excludedPaths = (body.excludedPaths ?? []).map((path) => normalizeLedgerPath(path))
+    const { active, excluded } = applyExclusions(allCandidates, {
+      selectedDirectories,
+      pinnedFiles,
+      excludedPaths,
+    })
+    return { all: allCandidates, active, excluded }
   }
 
   private async expandSelectedEntries(

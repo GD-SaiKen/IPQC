@@ -96,6 +96,12 @@
             保存选择
           </el-button>
         </div>
+        <div v-if="dataHubLinked" class="sync-form sync-form--schedule">
+          <span class="muted small">每日自动同步（上海）</span>
+          <el-input-number v-model="syncHour" :min="0" :max="23" controls-position="right" />
+          <span class="sync-colon">:</span>
+          <el-input-number v-model="syncMinute" :min="0" :max="59" controls-position="right" />
+        </div>
         <p v-if="selectionDirty && savedSelection" class="muted small sync-dirty-hint">
           树上勾选与已保存范围不一致；核对解析仍使用上方已保存内容。调整完成后请点「保存选择」。
         </p>
@@ -119,6 +125,33 @@
             {{ item.name }}：{{ item.status }}，请先在 data-hub 完成绑定与凭据
           </li>
         </ul>
+        <div v-if="syncRuns.length" class="sync-runs">
+          <h5 class="sync-subtitle">最近同步轮次</h5>
+          <table class="sync-runs-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>新增</th>
+                <th>跳过</th>
+                <th>差异</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in syncRuns" :key="row.id">
+                <td class="nowrap">{{ formatSavedAt(row.startedAt) }}</td>
+                <td>{{ row.runType === 'scheduled' ? '定时' : '手动' }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.addedCount }}</td>
+                <td>{{ row.skippedCount }}</td>
+                <td>{{ row.diffCount }}</td>
+                <td class="sync-run-msg">{{ row.message || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div v-if="previewResult" class="sync-preview sync-preview--crud">
           <p v-if="previewResult.summary" class="muted small">
             选中 {{ previewResult.summary.total }} 个文件，已解析 {{ previewResult.summary.parsed }} 个，未解析 {{ previewResult.summary.unparsed }} 个
@@ -204,8 +237,10 @@ import {
   fetchSyncConfig,
   previewLedgerSync,
   putSyncConfig,
+  listLedgerSyncRuns,
   runLedgerSync,
   type LedgerSelectionScope,
+  type LedgerSyncRunListItem,
   type LedgerShareItem,
   type PreviewIssue,
   type PreviewLedgerFile,
@@ -253,6 +288,7 @@ const restoringTree = ref(false)
 const syncHour = ref(6)
 const syncMinute = ref(0)
 const savingSelection = ref(false)
+const syncRuns = ref<LedgerSyncRunListItem[]>([])
 
 function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
   const split = splitSelectionPayload(payload)
@@ -494,6 +530,15 @@ async function hydrateSavedSelection(): Promise<void> {
   }
 }
 
+async function refreshSyncRuns(): Promise<void> {
+  try {
+    const data = await listLedgerSyncRuns({ page: 1, pageSize: 10 })
+    syncRuns.value = data.list
+  } catch {
+    syncRuns.value = []
+  }
+}
+
 async function refreshLinkAndShares(): Promise<void> {
   try {
     const status = await getDataHubLinkStatus()
@@ -519,6 +564,7 @@ async function refreshLinkAndShares(): Promise<void> {
 onMounted(async () => {
   await refreshLinkAndShares()
   await hydrateSavedSelection()
+  await refreshSyncRuns()
 })
 
 async function onConnectDataHub(): Promise<void> {
@@ -642,6 +688,7 @@ async function onConfirmSync(): Promise<void> {
       })),
     })
     await store.loadLedger()
+    await refreshSyncRuns()
     previewResult.value = null
     const diffHint = data.diffCount > 0 ? `，差异 ${data.diffCount} 条（以页面为准）` : ''
     ElMessage.success(
@@ -899,6 +946,31 @@ async function onFile(ev: Event): Promise<void> {
   gap: 8px;
   align-items: center;
   margin-top: 10px;
+}
+.sync-form--schedule {
+  margin-top: 8px;
+  gap: 8px;
+}
+.sync-colon {
+  font-weight: 600;
+}
+.sync-runs {
+  margin-top: 16px;
+}
+.sync-runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.sync-runs-table th,
+.sync-runs-table td {
+  border: 1px solid #e8ecf0;
+  padding: 6px 8px;
+  text-align: left;
+}
+.sync-run-msg {
+  max-width: 220px;
+  word-break: break-word;
 }
 .sync-form--edit {
   margin-top: 6px;

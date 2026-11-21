@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { HttpException, Inject, Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 
 import { apiError, API_MSG, RuntimeConfigService } from '../../common'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -41,9 +42,25 @@ import {
 import type { PutLedgerSyncConfigDto } from './dto/ledger-sync-config.dto'
 import type { LedgerSyncRunDto } from './dto/ledger-sync-run.dto'
 import { executeSyncWrites, planSyncApply } from './sync-db-apply'
+import {
+  extendSyncLease,
+  SYNC_HEARTBEAT_MS,
+  SYNC_LEASE_MS,
+} from './sync-run-helpers'
 
 const CONFIG_ID = '00000000-0000-0000-0000-000000000001'
 const SYNC_ADVISORY_LOCK = 840321
+
+type SyncRunKind = 'manual' | 'scheduled'
+
+interface ExecuteSyncOptions {
+  runType: SyncRunKind
+  actorUserId: string
+  viewUserId: string
+  scheduledRunDate?: string | null
+  previewFiles?: LedgerSyncRunDto['previewFiles']
+  throwOnError: boolean
+}
 
 @Injectable()
 export class LedgerSyncService {
@@ -562,8 +579,8 @@ export class LedgerSyncService {
       create: {
         id: CONFIG_ID,
         shareId: dto.shareId ?? null,
-        selectedEntries: dto.selectedEntries,
-        excludedPaths: dto.excludedPaths,
+        selectedEntries: dto.selectedEntries as unknown as Prisma.InputJsonValue,
+        excludedPaths: dto.excludedPaths as unknown as Prisma.InputJsonValue,
         hour: dto.hour,
         minute: dto.minute,
         savedByUserId: user.id,
@@ -571,8 +588,8 @@ export class LedgerSyncService {
       },
       update: {
         shareId: dto.shareId ?? null,
-        selectedEntries: dto.selectedEntries,
-        excludedPaths: dto.excludedPaths,
+        selectedEntries: dto.selectedEntries as unknown as Prisma.InputJsonValue,
+        excludedPaths: dto.excludedPaths as unknown as Prisma.InputJsonValue,
         hour: dto.hour,
         minute: dto.minute,
         savedByUserId: user.id,
@@ -652,17 +669,48 @@ export class LedgerSyncService {
       })
       throw apiError(400, '尚未配置同步', API_MSG.badRequest)
     }
+    const result = await this.executeSyncRun({
+      runType: 'manual',
+      actorUserId: user.id,
+      viewUserId: config.savedByUserId,
+      scheduledRunDate: null,
+      previewFiles: dto.previewFiles,
+      throwOnError: true,
+    })
+    return result
+  }
+
+  async runScheduledSync(scheduledRunDate: string): Promise<void> {
+    const config = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
+    if (!config?.shareId || !config.savedByUserId || !(config.selectedEntries as unknown[])?.length) {
+      return
+    }
+    await this.executeSyncRun({
+      runType: 'scheduled',
+      actorUserId: config.savedByUserId,
+      viewUserId: config.savedByUserId,
+      scheduledRunDate,
+      previewFiles: undefined,
+      throwOnError: false,
+    })
+  }
+
+  private async executeSyncRun(options: ExecuteSyncOptions) {
+    const config = await this.prisma.ledgerSyncConfig.findUnique({ where: { id: CONFIG_ID } })
+    if (!config?.shareId || !config.savedByUserId) {
+      throw apiError(400, '尚未配置同步', API_MSG.badRequest)
+    }
 
     const executorId = randomUUID()
-    const leaseUntil = new Date(Date.now() + 3 * 60 * 1000)
     const run = await this.prisma.ledgerSyncRun.create({
       data: {
-        runType: 'manual',
+        runType: options.runType,
         status: 'running',
         executorId,
-        leaseExpiresAt: leaseUntil,
-        actorUserId: user.id,
+        leaseExpiresAt: new Date(Date.now() + SYNC_LEASE_MS),
+        actorUserId: options.actorUserId,
         configVersion: config.configVersion,
+        scheduledRunDate: options.scheduledRunDate ?? null,
       },
     })
 
@@ -670,42 +718,81 @@ export class LedgerSyncService {
       SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK}) AS locked
     `
     if (!lockRows[0]?.locked) {
-      await this.prisma.ledgerSyncRun.update({
+      await this.prisma.ledgerSyncRun.updateMany({
         where: { id: run.id, executorId, status: 'running' },
         data: { status: 'failed', message: '已有同步正在执行', finishedAt: new Date() },
       })
-      throw apiError(409, '已有同步正在执行', API_MSG.conflict)
+      if (options.throwOnError) {
+        throw apiError(409, '已有同步正在执行', API_MSG.conflict)
+      }
+      return { id: run.id, status: 'failed' as const }
     }
 
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined
+    let leaseAlive = true
+
+    const stopHeartbeat = (): void => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
+        heartbeatTimer = undefined
+      }
+    }
+
+    heartbeatTimer = setInterval(() => {
+      void extendSyncLease(this.prisma, run.id, executorId).then((ok) => {
+        if (!ok) {
+          leaseAlive = false
+          stopHeartbeat()
+        }
+      })
+    }, SYNC_HEARTBEAT_MS)
+
     try {
+      if (!leaseAlive) {
+        throw apiError(409, '同步租约已失效', API_MSG.conflict)
+      }
+
       const tokenUserId = config.savedByUserId
-      const accessToken = await this.auth.getDataHubAccessToken(tokenUserId)
+      let accessToken: string
+      try {
+        accessToken = await this.auth.getDataHubAccessToken(tokenUserId)
+      } catch (error) {
+        throw apiError(401, '授权已失效', API_MSG.dataHubUnauthorized)
+      }
+
       const body: LedgerSyncBodyDto = {
         shareId: config.shareId,
-        selectedEntries: config.selectedEntries as LedgerSyncBodyDto['selectedEntries'],
-        excludedPaths: config.excludedPaths as string[],
-        previewFiles: dto.previewFiles,
+        selectedEntries: config.selectedEntries as unknown as LedgerSyncBodyDto['selectedEntries'],
+        excludedPaths: (config.excludedPaths as string[]) ?? [],
+        previewFiles: options.previewFiles,
       }
-      const packed = await this.buildSelectedView(
-        { ...user, id: tokenUserId },
-        body,
-        accessToken,
-        true,
-      )
+      const viewUser: AuthUser = {
+        id: options.viewUserId,
+        role: 'admin',
+        sessionId: executorId,
+        phone: '',
+        displayName: '',
+        dataHubUserId: null,
+      }
+      const packed = await this.buildSelectedView(viewUser, body, accessToken, true)
       if (hasBlockingIssues(packed.issues)) {
         throw apiError(400, packed.issues[0]?.message ?? '当前选择无法同步', API_MSG.badRequest)
       }
-      if (dto.previewFiles?.length) {
+      if (options.previewFiles?.length) {
         const currentSnapshot = packed.files.map((file) => ({
           path: file.path,
           modifiedAt: file.modifiedAt,
         }))
-        if (!comparePreviewFiles(dto.previewFiles, currentSnapshot)) {
+        if (!comparePreviewFiles(options.previewFiles, currentSnapshot)) {
           throw apiError(400, '共享盘文件已变化，请重新核对', API_MSG.badRequest)
         }
       }
       if (!packed.snapshot) {
         throw apiError(400, '当前选择无法同步', API_MSG.badRequest)
+      }
+
+      if (!leaseAlive) {
+        throw apiError(409, '同步租约已失效', API_MSG.conflict)
       }
 
       const plan = await planSyncApply(this.prisma, packed.snapshot, packed.checkScores ?? {})
@@ -746,7 +833,7 @@ export class LedgerSyncService {
 
       return {
         id: run.id,
-        status: 'success',
+        status: 'success' as const,
         addedCount: plan.addedCount,
         skippedCount: plan.skippedCount,
         diffCount: plan.diffCount,
@@ -768,8 +855,12 @@ export class LedgerSyncService {
         where: { id: run.id, status: 'running', executorId },
         data: { status: 'failed', message: String(message), finishedAt: new Date() },
       })
-      throw error
+      if (options.throwOnError) {
+        throw error
+      }
+      return { id: run.id, status: 'failed' as const }
     } finally {
+      stopHeartbeat()
       await this.prisma.$executeRaw`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK})`
     }
   }

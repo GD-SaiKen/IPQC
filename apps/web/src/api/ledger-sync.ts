@@ -154,3 +154,31 @@ export function runLedgerSync(body: {
     requestOptions: { sessionExpiredOn401: false },
   })
 }
+
+export interface LedgerSyncRunListItem {
+  id: string
+  runType: string
+  status: string
+  message: string
+  startedAt: string
+  finishedAt: string | null
+  scheduledRunDate: string | null
+  addedCount: number
+  skippedCount: number
+  diffCount: number
+}
+
+export function listLedgerSyncRuns(query?: {
+  page?: number
+  pageSize?: number
+}): Promise<{
+  list: LedgerSyncRunListItem[]
+  total: number
+  page: number
+  pageSize: number
+}> {
+  return request.get(`${BASE}/runs`, {
+    params: query,
+    requestOptions: { sessionExpiredOn401: false },
+  })
+}

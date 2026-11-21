@@ -126,15 +126,17 @@ function buildCreateData(
   return data
 }
 
-const DELEGATE: Record<
-  SourceKeyTable,
-  (p: PrismaService) => { count: () => Promise<number>; create: (args: unknown) => Promise<unknown> }
-> = {
-  fa: (p) => p.ledgerFa,
-  fqcNg: (p) => p.ledgerFqcNg,
-  fqc: (p) => p.ledgerFqc,
-  cmp: (p) => p.ledgerCmp,
-  perf: (p) => p.ledgerPerf,
+type LedgerCreateDelegate = {
+  count: () => Promise<number>
+  create: (args: unknown) => Promise<unknown>
+}
+
+const DELEGATE: Record<SourceKeyTable, (p: PrismaService) => LedgerCreateDelegate> = {
+  fa: (p) => p.ledgerFa as unknown as LedgerCreateDelegate,
+  fqcNg: (p) => p.ledgerFqcNg as unknown as LedgerCreateDelegate,
+  fqc: (p) => p.ledgerFqc as unknown as LedgerCreateDelegate,
+  cmp: (p) => p.ledgerCmp as unknown as LedgerCreateDelegate,
+  perf: (p) => p.ledgerPerf as unknown as LedgerCreateDelegate,
 }
 
 export async function planSyncApply(

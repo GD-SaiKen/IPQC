@@ -7,6 +7,7 @@ export const API_MSG = {
   forbidden: 'forbidden',
   notFound: 'not_found',
   conflict: 'conflict',
+  gone: 'gone',
   internalError: 'internal_error',
 } as const
 
@@ -16,6 +17,7 @@ const MSG_BY_STATUS: Record<number, string> = {
   403: API_MSG.forbidden,
   404: API_MSG.notFound,
   409: API_MSG.conflict,
+  410: API_MSG.gone,
   500: API_MSG.internalError,
 }
 

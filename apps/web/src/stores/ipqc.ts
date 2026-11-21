@@ -1,26 +1,42 @@
 import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
-import { exportDbJson, importDbJson, loadDb, saveDb } from '@/db/ipqc-store'
-import { getCheckScores } from '@/domain/ipqc/seed'
+import { createEmptyDb } from '@/domain/ipqc/seed'
+import { exportDbJson, importDbJson } from '@/db/ipqc-store'
+import { fetchLedgerSnapshot } from '@/api/ledger'
 import type { CheckScores, IpqcDb, WorkshopFilter } from '@/domain/ipqc/types'
 
 export const useIpqcStore = defineStore('ipqc', {
   state: () => ({
-    db: loadDb() as IpqcDb,
-    checkScores: getCheckScores() as CheckScores,
+    db: createEmptyDb() as IpqcDb,
+    checkScores: {} as CheckScores,
     workshop: '全部' as WorkshopFilter,
     boardMonth: 0,
     lastSavedAt: '',
     storageOk: true,
+    ledgerLoaded: false,
+    ledgerLoadError: '',
   }),
   actions: {
-    persist() {
-      this.storageOk = saveDb(this.db)
-      if (this.storageOk) {
-        this.lastSavedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-      } else {
-        ElMessage.error('本地存储写入失败（可能已满或被浏览器限制），请立即导出 JSON 备份。')
+    async loadLedger(): Promise<void> {
+      try {
+        const { db, checkScores } = await fetchLedgerSnapshot()
+        this.db = db
+        this.checkScores = checkScores
+        this.storageOk = true
+        this.ledgerLoadError = ''
+        this.ledgerLoaded = true
+      } catch {
+        this.db = createEmptyDb()
+        this.checkScores = {}
+        this.storageOk = false
+        this.ledgerLoadError = '无法从服务器加载台账'
+        this.ledgerLoaded = true
+        ElMessage.error(this.ledgerLoadError)
       }
+    },
+    persist() {
+      this.storageOk = true
+      this.lastSavedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     },
     setWorkshop(ws: WorkshopFilter) {
       this.workshop = ws

@@ -101,43 +101,36 @@ function parseFaSxSheet(sheet: WorkbookSheet, dept: string, fileLabel: string): 
     结果: ['结果', '判定'],
     检验员: ['检验员', '检验人', 'who'],
   })
-  const batches = new Map<
-    string,
-    { date: string; who: string; stage: string; dept: string; ng: boolean }
-  >()
+  const out: Record<string, unknown>[] = []
   for (const row of objects) {
     const date = pick(row, ['日期', '检验日期'])
     const who = pick(row, ['检验员', '检验人', 'who'])
     if (!date) continue
     const typeRaw = pick(row, ['类型', 'S/X', 'SX']).toUpperCase()
     const stage = typeRaw.startsWith('S') ? '首件' : typeRaw.startsWith('X') ? '巡检' : typeRaw || '首件'
-    const result = pick(row, ['结果', '判定']).toUpperCase()
-    const key = `${date}|${who}`
-    const existing = batches.get(key) ?? {
+    const result = pick(row, ['结果', '判定']).toUpperCase() || 'OK'
+    const pn = pick(row, ['料号', '品号', 'pn'])
+    const part = pick(row, ['品名', '零件', 'part'])
+    const item = pick(row, ['检验项', '项目', 'item'])
+    out.push({
       date,
-      who,
       stage,
       dept,
-      ng: false,
-    }
-    if (result === 'NG') existing.ng = true
-    batches.set(key, existing)
+      pn,
+      part,
+      item,
+      spec: pick(row, ['规格', '标准', 'spec']),
+      meas: pick(row, ['实测', 'meas']),
+      result: result === 'NG' ? 'NG' : 'OK',
+      who,
+      status: result === 'NG' ? 'NG' : 'OK',
+      action: result === 'NG' ? '待对策' : '首件OK，正常生产',
+      eng: pick(row, ['工艺', '工程', 'eng']),
+      fb: pick(row, ['反馈', 'fb']),
+      iv: pick(row, ['介入', 'iv']),
+    })
   }
-  return [...batches.values()].map((batch) => ({
-    date: batch.date,
-    stage: batch.stage,
-    dept: batch.dept,
-    pn: '',
-    part: '',
-    item: '',
-    spec: '',
-    meas: '',
-    result: batch.ng ? 'NG' : 'OK',
-    who: batch.who,
-    status: batch.ng ? 'NG' : 'OK',
-    action: batch.ng ? '待对策' : '首件OK，正常生产',
-    eng: '',
-  }))
+  return out
 }
 
 function parseComplaintSheet(sheet: WorkbookSheet, fileLabel: string): Record<string, unknown>[] {

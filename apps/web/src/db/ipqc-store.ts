@@ -1,4 +1,4 @@
-import { createDefaultDb, STORAGE_KEY } from '@/domain/ipqc/seed'
+import { createEmptyDb } from '@/domain/ipqc/seed'
 import type { IpqcDb } from '@/domain/ipqc/types'
 
 const TABLE_KEYS = [
@@ -25,26 +25,14 @@ export function isIpqcDb(value: unknown): value is IpqcDb {
   })
 }
 
+/** @deprecated 不再读取 localStorage，仅返回空库形状 */
 export function loadDb(): IpqcDb {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const d: unknown = JSON.parse(raw)
-      if (isIpqcDb(d)) return d
-    }
-  } catch {
-    /* fall through */
-  }
-  return createDefaultDb()
+  return createEmptyDb()
 }
 
-export function saveDb(db: IpqcDb): boolean {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
-    return true
-  } catch {
-    return false
-  }
+/** @deprecated 台账由服务器保存，本函数为兼容旧页面调用，恒为 true */
+export function saveDb(_db: IpqcDb): boolean {
+  return true
 }
 
 export function exportDbJson(db: IpqcDb): string {

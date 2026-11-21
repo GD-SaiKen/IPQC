@@ -10,7 +10,7 @@ function file(role: LedgerRole, name: string): MatchedFile {
 }
 
 describe('mapWorkbooksToSnapshot', () => {
-  it('S/X 归并为同一批次', () => {
+  it('S/X 每行一条，不再按检验员合并', () => {
     const wb = new Map([
       [
         'faInjection',
@@ -33,8 +33,9 @@ describe('mapWorkbooksToSnapshot', () => {
     const result = mapWorkbooksToSnapshot(files, wb, ['faInjectionBur'])
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.snapshot.fa).toHaveLength(1)
-    expect(result.snapshot.fa[0]?.result).toBe('NG')
+    expect(result.snapshot.fa).toHaveLength(2)
+    expect(result.snapshot.fa.some((r) => r.result === 'NG')).toBe(true)
+    expect(result.snapshot.fa.some((r) => r.result === 'OK')).toBe(true)
   })
 
   it('印刷表区分首件与终检', () => {

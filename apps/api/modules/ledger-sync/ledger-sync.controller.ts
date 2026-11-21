@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common'
 
+import { apiError, API_MSG } from '../../common/api-error'
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { LedgerSyncBodyDto } from './dto/ledger-sync-body.dto'
@@ -37,7 +38,7 @@ export class LedgerSyncController {
   }
 
   @Post()
-  sync(@CurrentUser() user: AuthUser, @Body() body: LedgerSyncBodyDto) {
-    return this.ledgerSync.sync(user, body)
+  sync() {
+    throw apiError(410, '请使用立即同步', API_MSG.gone)
   }
 }

@@ -277,6 +277,7 @@ watch(
 )
 
 onMounted(() => {
+  void store.loadLedger()
   onTitleLayoutChange()
   window.addEventListener('resize', checkTitleOverflow)
 })

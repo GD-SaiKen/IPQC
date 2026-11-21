@@ -46,3 +46,257 @@ model OauthLogin {
   @@map("oauth_logins")
 }
 
+model LedgerFa {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceKey   String?  @map("source_key") @db.Text
+  sourceFile  String?  @map("source_file") @db.Text
+  sourceSheet String?  @map("source_sheet") @db.VarChar(128)
+  sourceRow   Int?     @map("source_row")
+  date        String   @default("") @db.VarChar(32)
+  stage       String   @default("") @db.VarChar(64)
+  dept        String   @default("") @db.VarChar(64)
+  pn          String   @default("") @db.VarChar(64)
+  part        String   @default("") @db.VarChar(64)
+  item        String   @default("") @db.VarChar(200)
+  spec        String   @default("") @db.VarChar(500)
+  meas        String   @default("") @db.VarChar(500)
+  result      String   @default("") @db.VarChar(64)
+  who         String   @default("") @db.VarChar(64)
+  status      String   @default("") @db.VarChar(64)
+  action      String   @default("") @db.VarChar(500)
+  eng         String   @default("") @db.VarChar(64)
+  src         String   @default("") @db.VarChar(64)
+  fb          Decimal? @db.Decimal(12, 4)
+  iv          Decimal? @db.Decimal(12, 4)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_fa")
+}
+
+model LedgerFqcNg {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceKey   String?  @map("source_key") @db.Text
+  sourceFile  String?  @map("source_file") @db.Text
+  sourceSheet String?  @map("source_sheet") @db.VarChar(128)
+  sourceRow   Int?     @map("source_row")
+  ws          String   @default("") @db.VarChar(64)
+  d           String   @default("") @db.VarChar(32)
+  pn          String   @default("") @db.VarChar(64)
+  lot         String   @default("") @db.VarChar(64)
+  cat         String   @default("") @db.VarChar(200)
+  defs        String   @default("") @db.VarChar(500)
+  who         String   @default("") @db.VarChar(64)
+  act         String   @default("") @db.VarChar(500)
+  re          String   @default("") @db.VarChar(64)
+  rd          String   @default("") @db.VarChar(32)
+  samp        Decimal? @db.Decimal(12, 4)
+  bad         Decimal? @db.Decimal(12, 4)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_fqc_ng")
+}
+
+model LedgerFqc {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceKey   String?  @map("source_key") @db.Text
+  sourceFile  String?  @map("source_file") @db.Text
+  sourceSheet String?  @map("source_sheet") @db.VarChar(128)
+  sourceRow   Int?     @map("source_row")
+  date        String   @default("") @db.VarChar(32)
+  pn          String   @default("") @db.VarChar(64)
+  part        String   @default("") @db.VarChar(64)
+  issue       String   @default("") @db.VarChar(500)
+  checker     String   @default("") @db.VarChar(64)
+  depts       String   @default("") @db.VarChar(200)
+  note        String   @default("") @db.VarChar(500)
+  action      String   @default("") @db.VarChar(500)
+  stock       Decimal? @db.Decimal(12, 4)
+  ng          Decimal? @db.Decimal(12, 4)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_fqc")
+}
+
+model LedgerCmp {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceKey   String?  @map("source_key") @db.Text
+  sourceFile  String?  @map("source_file") @db.Text
+  sourceSheet String?  @map("source_sheet") @db.VarChar(128)
+  sourceRow   Int?     @map("source_row")
+  date        String   @default("") @db.VarChar(32)
+  from        String   @default("") @map("from_source") @db.VarChar(64)
+  dept        String   @default("") @db.VarChar(64)
+  model       String   @default("") @db.VarChar(64)
+  part        String   @default("") @db.VarChar(64)
+  pn          String   @default("") @db.VarChar(64)
+  issue       String   @default("") @db.VarChar(500)
+  cause       String   @default("") @db.VarChar(500)
+  temp        String   @default("") @db.VarChar(500)
+  perm        String   @default("") @db.VarChar(500)
+  owner       String   @default("") @db.VarChar(64)
+  planReply   String   @default("") @map("plan_reply") @db.VarChar(32)
+  actReply    String   @default("") @map("act_reply") @db.VarChar(32)
+  ontimeReply String   @default("") @map("ontime_reply") @db.VarChar(8)
+  planDisp    String   @default("") @map("plan_disp") @db.VarChar(32)
+  actDisp     String   @default("") @map("act_disp") @db.VarChar(32)
+  ontimeDisp  String   @default("") @map("ontime_disp") @db.VarChar(8)
+  planClose   String   @default("") @map("plan_close") @db.VarChar(32)
+  actClose    String   @default("") @map("act_close") @db.VarChar(32)
+  ontimeClose String   @default("") @map("ontime_close") @db.VarChar(8)
+  repeat      String   @default("") @db.VarChar(8)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_cmp")
+}
+
+model LedgerPerf {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceKey   String?  @map("source_key") @db.Text
+  sourceFile  String?  @map("source_file") @db.Text
+  sourceSheet String?  @map("source_sheet") @db.VarChar(128)
+  sourceRow   Int?     @map("source_row")
+  date        String   @default("") @db.VarChar(32)
+  dept        String   @default("") @db.VarChar(64)
+  who         String   @default("") @db.VarChar(64)
+  attr        String   @default("") @db.VarChar(64)
+  item        String   @default("") @db.VarChar(500)
+  score       Decimal? @db.Decimal(12, 4)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_perf")
+}
+
+model LedgerMat {
+  id        String   @id @default(uuid()) @db.Uuid
+  t         String   @default("") @db.VarChar(200)
+  dept      String   @default("") @db.VarChar(64)
+  type      String   @default("") @db.VarChar(64)
+  ver       String   @default("") @db.VarChar(64)
+  date      String   @default("") @db.VarChar(32)
+  pages     Decimal? @db.Decimal(12, 4)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_mat")
+}
+
+model LedgerTrn {
+  id        String   @id @default(uuid()) @db.Uuid
+  date      String   @default("") @db.VarChar(32)
+  dept      String   @default("") @db.VarChar(64)
+  topic     String   @default("") @db.VarChar(200)
+  trainer   String   @default("") @db.VarChar(64)
+  way       String   @default("") @db.VarChar(64)
+  num       Decimal? @db.Decimal(12, 4)
+  hours     Decimal? @db.Decimal(12, 4)
+  pass      Decimal? @db.Decimal(12, 4)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_trn")
+}
+
+model LedgerExam {
+  id        String   @id @default(uuid()) @db.Uuid
+  date      String   @default("") @db.VarChar(32)
+  who       String   @default("") @db.VarChar(64)
+  dept      String   @default("") @db.VarChar(64)
+  subject   String   @default("") @db.VarChar(200)
+  level     String   @default("") @db.VarChar(8)
+  score     Decimal? @db.Decimal(12, 4)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_exam")
+}
+
+model LedgerSkill {
+  id        String   @id @default(uuid()) @db.Uuid
+  who       String   @default("") @db.VarChar(64)
+  dept      String   @default("") @db.VarChar(64)
+  lv        Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_skill")
+}
+
+model CheckScore {
+  id        String   @id @default(uuid()) @db.Uuid
+  workshop  String   @db.VarChar(32)
+  month     String   @db.VarChar(16)
+  score     Decimal  @db.Decimal(12, 4)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workshop, month])
+  @@map("check_scores")
+}
+
+model LedgerTombstone {
+  id        String   @id @default(uuid()) @db.Uuid
+  tableName String   @map("table_name") @db.VarChar(16)
+  sourceKey String   @map("source_key") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([tableName, sourceKey])
+  @@map("ledger_tombstones")
+}
+
+model LedgerSyncConfig {
+  id               String   @id @default("00000000-0000-0000-0000-000000000001") @db.Uuid
+  shareId          String?  @map("share_id") @db.Uuid
+  selectedEntries  Json     @default("[]") @map("selected_entries")
+  excludedPaths    Json     @default("[]") @map("excluded_paths")
+  hour             Int      @default(6)
+  minute           Int      @default(0)
+  savedByUserId    String?  @map("saved_by_user_id") @db.Uuid
+  configVersion    Int      @default(0) @map("config_version")
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("ledger_sync_config")
+}
+
+model LedgerSyncRun {
+  id               String    @id @default(uuid()) @db.Uuid
+  runType          String    @map("run_type") @db.VarChar(16)
+  status           String    @db.VarChar(16)
+  message          String    @default("") @db.Text
+  startedAt        DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt       DateTime? @map("finished_at") @db.Timestamptz(3)
+  actorUserId      String?   @map("actor_user_id") @db.Uuid
+  configVersion    Int       @default(0) @map("config_version")
+  scheduledRunDate String?   @map("scheduled_run_date") @db.VarChar(10)
+  executorId       String?   @map("executor_id") @db.Uuid
+  leaseExpiresAt   DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  addedCount       Int       @default(0) @map("added_count")
+  skippedCount     Int       @default(0) @map("skipped_count")
+  diffCount        Int       @default(0) @map("diff_count")
+  unmatchedCount   Int       @default(0) @map("unmatched_count")
+  tombstoneSkipCount Int     @default(0) @map("tombstone_skip_count")
+  diffs            LedgerSyncRunDiff[]
+
+  @@map("ledger_sync_runs")
+}
+
+model LedgerSyncRunDiff {
+  id          String   @id @default(uuid()) @db.Uuid
+  runId       String   @map("run_id") @db.Uuid
+  tableName   String   @map("table_name") @db.VarChar(16)
+  rowId       String?  @map("row_id") @db.Uuid
+  field       String   @default("") @db.VarChar(64)
+  shareValue  String   @default("") @map("share_value") @db.Text
+  gridValue   String   @default("") @map("grid_value") @db.Text
+  kind        String   @db.VarChar(32)
+  workshop    String?  @db.VarChar(32)
+  month       String?  @db.VarChar(16)
+  run         LedgerSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("ledger_sync_run_diffs")
+}
+

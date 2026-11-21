@@ -82,6 +82,20 @@ export function getCheckScores(): CheckScores {
   return REAL.checkScores || {}
 }
 
+export function createEmptyDb(): IpqcDb {
+  return {
+    fa: [],
+    fqc: [],
+    fqcNg: [],
+    cmp: [],
+    perf: [],
+    mat: [],
+    trn: [],
+    exam: [],
+    skill: [],
+  }
+}
+
 export function createDefaultDb(): IpqcDb {
   return {
     fa: buildFa().sort((a, b) => String(b.date).localeCompare(String(a.date))),

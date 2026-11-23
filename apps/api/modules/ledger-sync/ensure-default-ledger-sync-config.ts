@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import type { PrismaClient } from '@prisma/client'
+import { type Prisma, type PrismaClient } from '@prisma/client'
 
 import { type BindingEntry, parseLedgerBindings } from './ledger-bindings'
 
@@ -57,16 +57,16 @@ export async function ensureDefaultLedgerSyncConfig(prisma: PrismaClient): Promi
     create: {
       id: LEDGER_SYNC_CONFIG_ID,
       shareId: defaults.shareId,
-      selectedEntries: defaults.selectedEntries,
-      excludedPaths: [],
+      selectedEntries: defaults.selectedEntries as unknown as Prisma.InputJsonValue,
+      excludedPaths: [] as unknown as Prisma.InputJsonValue,
       hour: defaults.hour,
       minute: defaults.minute,
       configVersion: 1,
     },
     update: {
       shareId: defaults.shareId,
-      selectedEntries: defaults.selectedEntries,
-      excludedPaths: [],
+      selectedEntries: defaults.selectedEntries as unknown as Prisma.InputJsonValue,
+      excludedPaths: [] as unknown as Prisma.InputJsonValue,
       hour: defaults.hour,
       minute: defaults.minute,
       configVersion: nextVersion,

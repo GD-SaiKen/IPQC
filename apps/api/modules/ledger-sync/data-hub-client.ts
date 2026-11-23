@@ -24,13 +24,56 @@ export interface DataHubWorkbook {
   sheets: Array<{ name: string; rows: string[][]; formulaWithoutCache?: boolean }>
 }
 
+export interface DataHubWorkbookManifest {
+  path: string
+  sheets: Array<{ name: string; totalRows: number; totalColumns: number }>
+  warnings?: string[]
+}
+
+export interface DataHubTablePage {
+  path: string
+  sheet: string
+  list: string[][]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface DataHubFileMetadata {
+  size?: number
+  modifiedAt?: string
+}
+
 type FetchLike = typeof fetch
+
+const RETRY_DELAYS_MS = [1000, 3000]
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
 
 function parseEnvelope<T>(body: unknown): T {
   if (body && typeof body === 'object' && 'data' in body) {
     return (body as { data: T }).data
   }
   return body as T
+}
+
+async function requestDataHub<T>(url: URL, accessToken: string, fetchFn: FetchLike): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetchFn(url, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    if (response.ok) {
+      return parseEnvelope<T>(await response.json())
+    }
+
+    const delay = RETRY_DELAYS_MS[attempt]
+    if (delay === undefined || !RETRYABLE_STATUSES.has(response.status)) {
+      const body: unknown = await response.json().catch(() => undefined)
+      throw new DataHubRequestError(response.status, body)
+    }
+
+    await response.body?.cancel().catch(() => undefined)
+    await new Promise<void>((resolve) => setTimeout(resolve, delay))
+  }
 }
 
 /** data-hub 列表项为 displayName / connectionStatus，规格层统一为 name / status */
@@ -113,14 +156,9 @@ async function listShareEntriesPage(
   url.searchParams.set('path', path)
   url.searchParams.set('page', String(page))
   url.searchParams.set('pageSize', String(pageSize))
-  const response = await fetchFn(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  const body = await response.json()
-  if (!response.ok) {
-    throw new DataHubRequestError(response.status, body)
-  }
-  const data = parseEnvelope<{ list: DataHubDirectoryEntry[]; total?: number }>(body)
+  const data = await requestDataHub<{ list: DataHubDirectoryEntry[]; total?: number }>(
+    url, accessToken, fetchFn,
+  )
   const list = data.list ?? []
   const total = data.total ?? list.length
   return { list, total }
@@ -131,14 +169,8 @@ export async function listShares(
   accessToken: string,
   fetchFn: FetchLike,
 ): Promise<DataHubShare[]> {
-  const response = await fetchFn(new URL('/api/shares?page=1&pageSize=100', apiOrigin), {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  const body = await response.json()
-  if (!response.ok) {
-    throw new DataHubRequestError(response.status, body)
-  }
-  const data = parseEnvelope<{ list: unknown[] }>(body)
+  const url = new URL('/api/shares?page=1&pageSize=100', apiOrigin)
+  const data = await requestDataHub<{ list: unknown[] }>(url, accessToken, fetchFn)
   return (data.list ?? []).map(normalizeShare).filter((item) => item.id.length > 0)
 }
 
@@ -188,17 +220,10 @@ export async function searchLedgerPaths(
       url.searchParams.set('pathPrefix', pathPrefix)
       url.searchParams.set('page', String(page))
       url.searchParams.set('pageSize', String(SEARCH_PAGE_SIZE))
-      const response = await fetchFn(url, {
-        headers: { authorization: `Bearer ${accessToken}` },
-      })
-      const body = await response.json()
-      if (!response.ok) {
-        throw new DataHubRequestError(response.status, body)
-      }
-      const data = parseEnvelope<{
+      const data = await requestDataHub<{
         list: Array<{ path: string; fileName?: string; name?: string }>
         total?: number
-      }>(body)
+      }>(url, accessToken, fetchFn)
       const list = data.list ?? []
       for (const row of list) {
         if (seen.has(row.path)) continue
@@ -220,21 +245,6 @@ export async function searchLedgerPaths(
 
 const TABLE_PAGE_SIZE = 100
 
-interface TableManifestResponse {
-  path: string
-  sheets: Array<{ name: string; totalRows: number; totalColumns: number }>
-  warnings?: string[]
-}
-
-interface TablePageResponse {
-  path: string
-  sheet: string
-  list: string[][]
-  total: number
-  page: number
-  pageSize: number
-}
-
 function dataHubErrorMessage(payload: unknown): string {
   if (!payload || typeof payload !== 'object') {
     return 'data-hub 请求失败'
@@ -252,70 +262,161 @@ function dataHubErrorMessage(payload: unknown): string {
   return 'data-hub 请求失败'
 }
 
-async function fetchShareTableManifest(
+export async function fetchTableManifest(
   apiOrigin: string,
   accessToken: string,
   shareId: string,
   path: string,
-  fetchFn: FetchLike,
-): Promise<TableManifestResponse> {
+  fetchFn: FetchLike = fetch,
+): Promise<DataHubWorkbookManifest> {
   const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/table`, apiOrigin)
   url.searchParams.set('path', path)
-  const response = await fetchFn(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  const body = await response.json()
-  if (!response.ok) {
-    throw new DataHubRequestError(response.status, body)
+  const manifest = await requestDataHub<DataHubWorkbookManifest>(url, accessToken, fetchFn)
+  if (!manifest || typeof manifest.path !== 'string' || !Array.isArray(manifest.sheets)) {
+    throw new DataHubRequestError(502, { message: '工作表清单响应不完整' })
   }
-  return parseEnvelope<TableManifestResponse>(body)
+  return manifest
 }
 
-async function fetchShareTablePage(
+export async function fetchTablePage(
   apiOrigin: string,
   accessToken: string,
   shareId: string,
   path: string,
   sheet: string,
   page: number,
-  fetchFn: FetchLike,
-): Promise<TablePageResponse> {
+  pageSize = TABLE_PAGE_SIZE,
+  fetchFn: FetchLike = fetch,
+): Promise<DataHubTablePage> {
   const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/table`, apiOrigin)
   url.searchParams.set('path', path)
   url.searchParams.set('sheet', sheet)
   url.searchParams.set('page', String(page))
-  url.searchParams.set('pageSize', String(TABLE_PAGE_SIZE))
-  const response = await fetchFn(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  const body = await response.json()
-  if (!response.ok) {
-    throw new DataHubRequestError(response.status, body)
-  }
-  return parseEnvelope<TablePageResponse>(body)
+  url.searchParams.set('pageSize', String(pageSize))
+  return requestDataHub<DataHubTablePage>(url, accessToken, fetchFn)
 }
 
-async function fetchShareFileModifiedAt(
+function isFileSize(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+const ZONED_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
+
+function isModifiedAt(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const day = ZONED_TIMESTAMP.exec(value)?.[1]
+  if (!day) return false
+
+  // Date 会将 2 月 30 日等无效日期滚动到下个月，需核对原始日期。
+  const date = new Date(`${day}T00:00:00Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day
+}
+
+export async function fetchFileMetadata(
   apiOrigin: string,
   accessToken: string,
   shareId: string,
   path: string,
-  fetchFn: FetchLike,
-): Promise<string | undefined> {
+  fetchFn: FetchLike = fetch,
+): Promise<DataHubFileMetadata> {
   const url = new URL(`/api/shares/${encodeURIComponent(shareId)}/metadata`, apiOrigin)
   url.searchParams.set('path', path)
-  const response = await fetchFn(url, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-  if (!response.ok) {
-    return undefined
+  const data = await requestDataHub<{ size?: unknown; modifiedAt?: unknown } | null>(
+    url, accessToken, fetchFn,
+  )
+  const { size, modifiedAt } = data ?? {}
+  return {
+    size: isFileSize(size) ? size : undefined,
+    modifiedAt: isModifiedAt(modifiedAt) ? modifiedAt : undefined,
   }
-  const body = await response.json()
-  const data = parseEnvelope<{ modifiedAt?: string | null }>(body)
-  return data.modifiedAt ?? undefined
 }
 
-/** 通过 data-hub `/table` 投影分页读取，组装与映射层一致的 workbook 结构 */
+export function getFileMetadataFingerprint({ size, modifiedAt }: DataHubFileMetadata): string | undefined {
+  if (!isFileSize(size) || !isModifiedAt(modifiedAt)) return undefined
+  return JSON.stringify([size, modifiedAt])
+}
+
+function assertFileUnchanged(before: DataHubFileMetadata, after: DataHubFileMetadata): void {
+  const sizeChanged = before.size !== undefined && after.size !== undefined
+    && before.size !== after.size
+  const timeChanged = before.modifiedAt !== undefined && after.modifiedAt !== undefined
+    && before.modifiedAt !== after.modifiedAt
+  if (sizeChanged || timeChanged) {
+    throw new DataHubRequestError(409, { message: '共享盘文件已变化，请重试' })
+  }
+}
+
+type OnPage = (progress: { sheet: string; page: number; readRows: number }) => void | Promise<void>
+
+async function readSheets(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  manifest: DataHubWorkbookManifest,
+  sheetNames: readonly string[],
+  fetchFn: FetchLike,
+  onPage?: OnPage,
+): Promise<DataHubWorkbook['sheets']> {
+  const declaredSheets = new Map(manifest.sheets.map((sheet) => [sheet.name, sheet]))
+
+  const sheets: DataHubWorkbook['sheets'] = []
+  let readRows = 0
+  for (const name of new Set(sheetNames)) {
+    const declared = declaredSheets.get(name)
+    if (!declared || !Number.isSafeInteger(declared.totalRows) || declared.totalRows < 0) {
+      throw new DataHubRequestError(502, { message: `工作表清单缺少有效行数：${name}` })
+    }
+    const rows: string[][] = []
+    for (let page = 1; rows.length < declared.totalRows; page += 1) {
+      const chunk = await fetchTablePage(
+        apiOrigin, accessToken, shareId, path, name, page, TABLE_PAGE_SIZE, fetchFn,
+      )
+      const expectedRows = Math.min(TABLE_PAGE_SIZE, declared.totalRows - rows.length)
+      if (
+        !chunk || chunk.path !== manifest.path || chunk.sheet !== name
+        || chunk.page !== page || chunk.pageSize !== TABLE_PAGE_SIZE || chunk.total !== declared.totalRows
+        || !Array.isArray(chunk.list) || chunk.list.length !== expectedRows
+        || chunk.list.some((row) => !Array.isArray(row))
+      ) {
+        throw new DataHubRequestError(502, { message: `工作表分页不完整：${name}第${page}页` })
+      }
+      rows.push(...chunk.list)
+      readRows += chunk.list.length
+      await onPage?.({ sheet: name, page, readRows })
+    }
+    sheets.push({ name, rows })
+  }
+  return sheets
+}
+
+/** metadataBefore 在读取工作表清单前取得，分页结束后再次核对。 */
+export async function fetchPlannedSheets(
+  apiOrigin: string,
+  accessToken: string,
+  shareId: string,
+  path: string,
+  manifest: DataHubWorkbookManifest,
+  sheetNames: readonly string[],
+  metadataBefore: DataHubFileMetadata,
+  fetchFn: FetchLike = fetch,
+  onPage?: OnPage,
+): Promise<{
+  sheets: DataHubWorkbook['sheets']
+  metadata: DataHubFileMetadata
+  fingerprint?: string
+}> {
+  const sheets = await readSheets(
+    apiOrigin, accessToken, shareId, path, manifest, sheetNames, fetchFn, onPage,
+  )
+  const metadata = await fetchFileMetadata(apiOrigin, accessToken, shareId, path, fetchFn)
+  assertFileUnchanged(metadataBefore, metadata)
+  const before = getFileMetadataFingerprint(metadataBefore)
+  const after = getFileMetadataFingerprint(metadata)
+  return { sheets, metadata, fingerprint: before === after ? after : undefined }
+}
+
+/** 兼容既有全工作簿映射和可选修改时间。 */
 export async function fetchWorkbook(
   apiOrigin: string,
   accessToken: string,
@@ -323,42 +424,21 @@ export async function fetchWorkbook(
   path: string,
   fetchFn: FetchLike,
 ): Promise<DataHubWorkbook> {
-  const [modifiedAt, manifest] = await Promise.all([
-    fetchShareFileModifiedAt(apiOrigin, accessToken, shareId, path, fetchFn),
-    fetchShareTableManifest(apiOrigin, accessToken, shareId, path, fetchFn),
-  ])
-
-  const sheets: DataHubWorkbook['sheets'] = []
-  for (const meta of manifest.sheets) {
-    const rows: string[][] = []
-    if (meta.totalRows > 0) {
-      let page = 1
-      while (rows.length < meta.totalRows) {
-        const chunk = await fetchShareTablePage(
-          apiOrigin,
-          accessToken,
-          shareId,
-          path,
-          meta.name,
-          page,
-          fetchFn,
-        )
-        if (!chunk.list.length) {
-          break
-        }
-        rows.push(...chunk.list)
-        if (rows.length >= chunk.total || chunk.list.length < TABLE_PAGE_SIZE) {
-          break
-        }
-        page += 1
-      }
-    }
-    sheets.push({ name: meta.name, rows })
+  const readOptionalMetadata = () => fetchFileMetadata(apiOrigin, accessToken, shareId, path, fetchFn)
+    .catch((error: unknown): DataHubFileMetadata => {
+      if (error instanceof DataHubRequestError && error.status !== 401) return {}
+      throw error
+    })
+  const before = await readOptionalMetadata()
+  const manifest = await fetchTableManifest(apiOrigin, accessToken, shareId, path, fetchFn)
+  const names = manifest.sheets.map((sheet) => sheet.name)
+  const sheets = await readSheets(apiOrigin, accessToken, shareId, path, manifest, names, fetchFn)
+  if (before.size !== undefined || before.modifiedAt !== undefined) {
+    assertFileUnchanged(before, await readOptionalMetadata())
   }
-
   return {
     path: manifest.path,
-    modifiedAt,
+    modifiedAt: before.modifiedAt,
     sheets,
   }
 }

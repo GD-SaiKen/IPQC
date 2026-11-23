@@ -1,5 +1,4 @@
-import checkItemsJson from '@/fixtures/raw/check-items.json'
-import realJson from '@/fixtures/raw/real.json'
+import { CHECK_ITEMS_BASELINE } from './baseline/check-items'
 import type { CheckScores } from './types'
 import { pct, sum } from './format'
 
@@ -10,15 +9,11 @@ export const CHK_APPLY: Record<string, { before: number; from10: number }> = {
 }
 
 export type CheckItemTuple = [category: string, item: string, score: number]
-export const CHECK_ITEMS = checkItemsJson as unknown as Record<string, CheckItemTuple[]>
+export const CHECK_ITEMS = CHECK_ITEMS_BASELINE as unknown as Record<string, CheckItemTuple[]>
 
-const REAL_CHECK = realJson as {
-  checkItemScores?: Record<string, (number | null)[]>
-  checkDaily?: Record<string, { m: number; s: number }[]>
-}
-/** 仅注塑车间有逐项实测清单；其余责任区只有总分 */
-export const CHECK_ITEM_SCORES = REAL_CHECK.checkItemScores || {}
-export const CHECK_DAILY = REAL_CHECK.checkDaily || {}
+/** 仅注塑车间有逐项实测清单；其余责任区只有总分（实测分来自服务器 checkScores） */
+export const CHECK_ITEM_SCORES: Record<string, (number | null)[]> = {}
+export const CHECK_DAILY: Record<string, { m: number; s: number }[]> = {}
 
 export function chkLatest(scores: CheckScores, w: string): number {
   const s = scores[w] || {}

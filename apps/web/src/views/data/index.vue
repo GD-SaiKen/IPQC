@@ -121,7 +121,7 @@
             @check="onTreeCheck"
           />
           <p class="muted small sync-selection-hint">
-            只勾选文件。勾选目录不会绑定，也不会按文件名识别。
+            勾选目录会自动勾选其下全部文件；保存与核对仍按「单文件 + 角色」绑定，不会按目录或文件名自动识别。
           </p>
           <table v-if="selectedFiles.length" class="sync-runs-table">
             <thead>
@@ -348,10 +348,15 @@ import {
   canConfirmSync,
   explainSyncDisabled,
   isSameSelection,
+  isUnderPath,
   type PreviewFilter,
   type SavedLedgerSelection,
   type SyncSelectionPayload,
 } from '@/views/data/ledger-selection'
+import {
+  collectShareFilePaths,
+  filterFilesOutsideDirectory,
+} from '@/views/data/ledger-share-tree'
 import { request } from '@/utils/request'
 import LedgerSyncPreview from '@/components/ledger-sync-preview/ledger-sync-preview.vue'
 import SectionCard from '@/components/section-card/section-card.vue'
@@ -542,25 +547,76 @@ async function loadTreeNode(
   restoreTreeSelection()
 }
 
-function onTreeCheck(data: TreeNodeData): void {
-  if (restoringTree.value) {
+const expandingDirectory = ref(false)
+
+function applySelectedFiles(paths: string[]): void {
+  pendingTreeRestore.value = null
+  const unique = [...new Set(paths)]
+  selectedDirectories.value = []
+  selectedFiles.value = unique
+  const keep = new Set(unique)
+  const next: Record<string, string> = {}
+  for (const [path, role] of Object.entries(fileRoles.value)) {
+    if (keep.has(path)) {
+      next[path] = role
+    }
+  }
+  fileRoles.value = next
+}
+
+function syncSelectionFromTree(): void {
+  const nodes = (treeRef.value?.getCheckedNodes(false, false) as TreeNodeData[] | undefined) ?? []
+  const files = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
+  applySelectedFiles(files)
+}
+
+async function onTreeCheck(data: TreeNodeData): Promise<void> {
+  if (restoringTree.value || expandingDirectory.value) {
+    return
+  }
+  const tree = treeRef.value
+  if (!tree || !shareId.value) {
     return
   }
   if (data.kind === 'directory') {
-    treeRef.value?.setChecked(data.path, false, false)
-    ElMessage.warning('请勾选单个文件并指定角色，目录不会自动识别')
+    const node = tree.getNode(data.path)
+    const isChecked = Boolean(node?.checked)
+    if (!isChecked) {
+      const remaining = filterFilesOutsideDirectory(selectedFiles.value, data.path)
+      for (const path of selectedFiles.value) {
+        if (isUnderPath(path, data.path)) {
+          tree.setChecked(path, false, false)
+        }
+      }
+      applySelectedFiles(remaining)
+      return
+    }
+    expandingDirectory.value = true
+    try {
+      const discovered = await collectShareFilePaths(shareId.value, data.path, listShareDirectories)
+      const merged = [...new Set([...selectedFiles.value, ...discovered])]
+      for (const path of discovered) {
+        tree.setChecked(path, true, false)
+      }
+      applySelectedFiles(merged)
+      if (!discovered.length) {
+        ElMessage.info('该目录下没有文件')
+      }
+    } catch (error) {
+      tree.setChecked(data.path, false, false)
+      if (request.isDataHubUnauthorized(error)) {
+        dataHubLinked.value = false
+        shares.value = []
+        shareId.value = ''
+      } else {
+        ElMessage.error('列出目录下文件失败，请稍后重试')
+      }
+    } finally {
+      expandingDirectory.value = false
+    }
     return
   }
-  pendingTreeRestore.value = null
-  const nodes = (treeRef.value?.getCheckedNodes(false, false) as TreeNodeData[] | undefined) ?? []
-  selectedDirectories.value = []
-  selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
-  const keep = new Set(selectedFiles.value)
-  const next: Record<string, string> = {}
-  for (const [path, role] of Object.entries(fileRoles.value)) {
-    if (keep.has(path)) next[path] = role
-  }
-  fileRoles.value = next
+  syncSelectionFromTree()
 }
 const previewing = ref(false)
 const syncing = ref(false)

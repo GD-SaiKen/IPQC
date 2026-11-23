@@ -19,24 +19,9 @@ const sampleDb: IpqcDb = {
   exam: [],
   skill: [],
   trn: [
-    {
-      date: '2026-03-10',
-      dept: '通用',
-      t: '安全培训',
-      num: 20,
-    } as TrainingRecord,
-    {
-      date: '2026-03-12',
-      dept: '注塑',
-      t: '外观限度样',
-      num: 8,
-    } as TrainingRecord,
-    {
-      date: '2026-03-15',
-      dept: '压铸',
-      t: '气孔判定',
-      num: 6,
-    } as TrainingRecord,
+    { date: '2026-03-10', dept: '通用', t: '安全培训', num: 20 },
+    { date: '2026-03-12', dept: '注塑', t: '外观限度样', num: 8 },
+    { date: '2026-03-15', dept: '压铸', t: '气孔判定', num: 6 },
   ],
 }
 

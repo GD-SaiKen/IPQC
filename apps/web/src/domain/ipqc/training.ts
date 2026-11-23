@@ -1,4 +1,4 @@
-import skillsJson from '@/fixtures/raw/skills.json'
+import { SKILLS_BASELINE } from './baseline/skills'
 import { num, pct, shortDept, sum } from './format'
 import type {
   SkillRow,
@@ -8,7 +8,7 @@ import type {
   WorkshopFilter,
 } from './types'
 
-export const SKILLS = skillsJson as string[]
+export const SKILLS = [...SKILLS_BASELINE]
 
 export const SKILL_LEVELS: [number, string][] = [
   [1, '了解'],

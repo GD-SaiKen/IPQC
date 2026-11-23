@@ -1,11 +1,11 @@
-import fqcKeysJson from '@/fixtures/raw/fqc-keys.json'
-import fqcsJson from '@/fixtures/raw/fqcs.json'
+import { buildEmptyFqcs, type FqcBook } from './baseline/empty-fqc-books'
+import { FQC_KEYS } from './baseline/fqc-keys'
 import { inMonth, num, pct, shortDept, sum } from './format'
 import type { FqcNgRow, WorkshopFilter } from './types'
 
-export const FQC_KEYS = fqcKeysJson as string[]
-export type FqcBook = (typeof fqcsJson)[keyof typeof fqcsJson]
-export const FQCS = fqcsJson as Record<string, FqcBook>
+export { FQC_KEYS }
+export type { FqcBook }
+export const FQCS = buildEmptyFqcs()
 
 export const FQC_WS_SRC: Record<string, string[]> = {
   注塑: ['注塑'],

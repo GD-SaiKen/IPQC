@@ -1,4 +1,4 @@
-import stdIndexJson from '@/fixtures/raw/std-index.json'
+import { STD_INDEX_BASELINE } from './baseline/std-index'
 
 export interface StdItem {
   n: string
@@ -9,7 +9,7 @@ export interface StdItem {
 }
 
 export const STD_ROOT = 'D:/AI文件夹'
-export const STD_INDEX = stdIndexJson as StdItem[]
+export const STD_INDEX = [...STD_INDEX_BASELINE] as StdItem[]
 
 export const STD_TYPES: [string, string][] = [
   ['全部', ''],

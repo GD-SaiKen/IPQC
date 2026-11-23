@@ -9,11 +9,11 @@
     "build": "pnpm --filter @ipqc/web build && pnpm --filter @ipqc/api run build",
     "test": "pnpm --filter @ipqc/web test && pnpm --filter @ipqc/api test",
     "lint": "pnpm --filter @ipqc/web lint && pnpm --filter @ipqc/api lint",
-    "extract-seed": "node scripts/extract-prototype-seed.mjs",
-    "empty-seed": "node scripts/write-empty-seed.mjs",
     "prisma:generate": "prisma generate",
     "apply:ledger-bindings": "node scripts/apply-ledger-default-bindings.mjs",
-    "apply:ledger-bindings:force": "node scripts/apply-ledger-default-bindings.mjs --force"
+    "apply:ledger-bindings:force": "node scripts/apply-ledger-default-bindings.mjs --force",
+    "clean:ledger-sync": "node scripts/clean-ledger-sync-data.mjs",
+    "clean:ledger-sync:dry-run": "node scripts/clean-ledger-sync-data.mjs --dry-run"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

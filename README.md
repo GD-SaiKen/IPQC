@@ -8,8 +8,6 @@ IPQC 已迁移到 `GD-SaiKen` 组织，并使用组织级中心仓库 [GD-SaiKen
 
 ```bash
 pnpm install
-pnpm empty-seed       # 将 fixtures/raw 台账种子置空（默认状态）
-pnpm extract-seed     # 从 docs/原型 HTML 重新抽取演示种子 JSON
 pnpm dev            # http://localhost:5173
 pnpm lint           # vue-tsc 类型检查
 pnpm test

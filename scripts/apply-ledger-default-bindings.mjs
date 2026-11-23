@@ -1,5 +1,5 @@
 /**
- * 将 config/ledger-default-bindings.json 写入 ledger_sync_config。
+ * 将 scripts/data 示例绑定写入 ledger_sync_config。
  * 用法：node scripts/apply-ledger-default-bindings.mjs
  * 强制覆盖：node scripts/apply-ledger-default-bindings.mjs --force
  */
@@ -21,7 +21,7 @@ const CONFIG_ID = '00000000-0000-0000-0000-000000000001'
 const force = process.argv.includes('--force')
 
 const defaults = JSON.parse(
-  readFileSync(resolve(root, 'config/ledger-default-bindings.json'), 'utf8'),
+  readFileSync(resolve(root, 'scripts/data/ledger-sync-bindings.example.json'), 'utf8'),
 )
 
 const prisma = new PrismaClient()

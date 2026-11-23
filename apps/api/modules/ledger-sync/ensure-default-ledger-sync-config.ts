@@ -17,20 +17,20 @@ export interface DefaultLedgerBindingsFile {
 export function defaultLedgerBindingsPath(): string {
   let dir = __dirname
   for (let i = 0; i < 8; i++) {
-    const candidate = resolve(dir, 'config/ledger-default-bindings.json')
+    const candidate = resolve(dir, 'scripts/data/ledger-sync-bindings.example.json')
     if (existsSync(candidate)) {
       return candidate
     }
     dir = resolve(dir, '..')
   }
-  throw new Error('找不到 config/ledger-default-bindings.json')
+  throw new Error('找不到 ledger-sync-bindings.example.json')
 }
 
 export function readDefaultLedgerBindingsFile(): DefaultLedgerBindingsFile {
   const raw = JSON.parse(readFileSync(defaultLedgerBindingsPath(), 'utf8')) as DefaultLedgerBindingsFile
   const parsed = parseLedgerBindings(raw.selectedEntries)
   if (parsed.bindings.length === 0 || parsed.issues.length > 0) {
-    throw new Error('默认台账绑定配置无效，请检查 config/ledger-default-bindings.json')
+    throw new Error('默认台账绑定配置无效，请检查 scripts/data/ledger-sync-bindings.example.json')
   }
   return raw
 }

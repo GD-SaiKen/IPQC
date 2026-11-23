@@ -1,6 +1,6 @@
 import type { WorkshopConfig } from './types'
 
-/** 与原型 / 规格一致；提取脚本亦会写入 fixtures/raw/workshops.json 供对照 */
+/** 与原型 / 规格一致 */
 export const WORKSHOPS: WorkshopConfig[] = [
   { key: '注塑', name: '注塑车间', owner: '杨永昌', ce: '何少平', color: '#2563eb', max: 140 },
   { key: '注塑毛边', name: '注塑毛边车间', owner: '毛瑞', ce: '何少平', color: '#0891b2', max: 40 },

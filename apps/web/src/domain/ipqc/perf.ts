@@ -1,4 +1,4 @@
-import perfRulesJson from '@/fixtures/raw/perf-rules.json'
+import { PERF_RULES_BASELINE } from './baseline/perf-rules'
 import { num, shortDept, sum } from './format'
 import type { PerfRecord } from './types'
 
@@ -21,7 +21,7 @@ export interface PerfRule {
   rows: string[]
 }
 
-export const PERF_RULES = perfRulesJson as PerfRule[]
+export const PERF_RULES = PERF_RULES_BASELINE as unknown as PerfRule[]
 
 export const PERF_ATTRS = ['准确率', '准时率', '纪律', '团队协作', '技能'] as const
 

@@ -1,6 +1,10 @@
 import type { LedgerRole } from './ledger-roles'
 import type { MatchedFile } from './match-files'
 
+import { parseSourceSheet } from './parse-source-sheet'
+import { inspectSourceSheets } from './source-templates'
+import { SOURCE_PARSER_VERSION } from './source-types'
+
 export interface WorkbookSheet {
   name: string
   rows: string[][]
@@ -274,6 +278,50 @@ const FQC_WS: Partial<Record<LedgerRole, string>> = {
   fqcCoating: '涂装',
 }
 
+/** 已核实业务表投影到旧快照接口；未核实的普通行表保留兼容入口。 */
+function mapKnownSheets(
+  file: MatchedFile,
+  workbook: WorkbookPayload,
+  snapshot: LedgerSnapshot,
+  checkScores: CheckScoresPayload,
+): WorkbookSheet[] | undefined {
+  const discovered = inspectSourceSheets(file.path, {
+    path: workbook.path,
+    sheets: workbook.sheets.map(({ name, rows }) => ({
+      name, totalRows: rows.length, totalColumns: rows[0]?.length ?? 0,
+    })),
+  }, { role: file.role })
+  if (!discovered.plans.length) {
+    const pending = discovered.skipped.find(({ code }) => code === 'unsupported_source' || code === 'ambiguous_source')
+    if (pending) throw new Error(pending.message)
+    const candidateNames = new Set(discovered.skipped.filter(({ code }) => code === 'unrecognized_sheet')
+      .map(({ sheet }) => sheet))
+    const legacySheets = workbook.sheets.filter(({ name }) => candidateNames.has(name))
+    if (!legacySheets.length) throw new Error(discovered.skipped[0]?.message ?? '没有可同步的业务工作表')
+    return legacySheets
+  }
+  const parsed = discovered.plans.map((plan) => parseSourceSheet(
+    plan, workbook.sheets.find(({ name }) => name === plan.name)!.rows,
+    { shareId: '', path: file.path, sheet: plan.name, parserVersion: SOURCE_PARSER_VERSION },
+  ))
+  for (const { diagnostics } of parsed) {
+    const invalidHeader = diagnostics.find(({ code }) => code === 'unsupported_header')
+    if (invalidHeader) throw new Error(invalidHeader.message)
+  }
+  for (const { rows } of parsed) {
+    for (const { table, fields, identity } of rows) {
+      if (!identity || table === 'fqcInspection') continue
+      if (table === 'checkScore') {
+        const scores = checkScores[String(fields.ws)] ?? (checkScores[String(fields.ws)] = {})
+        scores[String(fields.month)] = Number(fields.score)
+      } else {
+        snapshot[table].push(fields)
+      }
+    }
+  }
+  return undefined
+}
+
 export function mapWorkbooksToSnapshot(
   files: MatchedFile[],
   workbooks: Map<LedgerRole, WorkbookPayload>,
@@ -286,10 +334,13 @@ export function mapWorkbooksToSnapshot(
   for (const file of files) {
     if (missingOptional.includes(file.role)) continue
     try {
-      const wb = workbooks.get(file.role)
-      if (!wb?.sheets?.length) {
+      const workbook = workbooks.get(file.role)
+      if (!workbook?.sheets?.length) {
         throw new Error(`无法读取：${file.name}`)
       }
+      const legacySheets = mapKnownSheets(file, workbook, snapshot, checkScores)
+      if (!legacySheets) continue
+      const wb = { ...workbook, sheets: legacySheets }
       const label = file.name
 
       if (file.role === 'printLedger') {

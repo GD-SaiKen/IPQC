@@ -64,11 +64,58 @@ export function isCompleteBindingSelection(entries: BindingEntry[]): boolean {
   return new Set(roles).size === roles.length
 }
 
-export function bindingSaveError(files: string[], roles: Record<string, string>): string {
-  if (files.length === 0) return '请勾选单个文件'
-  const missing = files.filter((path) => !roles[path])
-  if (missing.length) return '请为每个勾选的文件选择角色'
-  const used = files.map((path) => roles[path])
-  if (new Set(used).size !== used.length) return '同一角色只能绑定一个文件'
+/** 角色 → 文件路径（保存时只写入有值的行） */
+export function roleToPathFromEntries(entries: BindingEntry[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const entry of entries) {
+    if (entry.kind === 'file' && entry.role) {
+      map[entry.role] = entry.path
+    }
+  }
+  return map
+}
+
+export function entriesFromRoleToPath(roleToPath: Record<string, string>): BindingEntry[] {
+  return Object.entries(roleToPath)
+    .filter(([, path]) => path.trim())
+    .map(([role, path]) => ({
+      path,
+      kind: 'file' as const,
+      role,
+      template: templateIdForRole(role),
+    }))
+}
+
+export function boundPathCount(roleToPath: Record<string, string>): number {
+  return Object.values(roleToPath).filter((path) => path.trim()).length
+}
+
+export function bindingSaveErrorFromRoleMap(roleToPath: Record<string, string>): string {
+  const paths = Object.values(roleToPath).filter((path) => path.trim())
+  if (paths.length === 0) {
+    return '请至少为一个台账角色选择文件'
+  }
+  if (new Set(paths).size !== paths.length) {
+    return '同一文件不能绑定多个角色'
+  }
   return ''
+}
+
+/** @deprecated 文件×角色矩阵；树上大量勾选时请改用按角色选文件 */
+export function bindingSaveError(files: string[], roles: Record<string, string>): string {
+  const roleToPath: Record<string, string> = {}
+  for (const path of files) {
+    const role = roles[path]
+    if (role) {
+      roleToPath[role] = path
+    }
+  }
+  if (files.length === 0) {
+    return '请勾选单个文件'
+  }
+  const missing = files.filter((path) => !roles[path])
+  if (missing.length) {
+    return '请为每个勾选的文件选择角色'
+  }
+  return bindingSaveErrorFromRoleMap(roleToPath)
 }

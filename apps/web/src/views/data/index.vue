@@ -46,6 +46,9 @@
           <span v-if="savedSelection" class="muted small sync-preview-hint">
             核对只读取已保存的文件绑定，与树上尚未保存的勾选无关。
           </span>
+          <span v-else-if="previewDisabledHint" class="muted small sync-preview-hint">
+            {{ previewDisabledHint }}
+          </span>
         </div>
         <div v-if="savedSelection" class="sync-saved">
           <h5 class="sync-subtitle">已保存的文件绑定</h5>
@@ -73,7 +76,7 @@
           </div>
         </div>
         <div v-else-if="dataHubLinked" class="sync-saved sync-saved--empty">
-          <p class="muted small">尚未保存文件绑定。请勾选单个文件、指定角色后再点「保存选择」。</p>
+          <p class="muted small">尚未保存文件绑定。在树中勾选候选文件后，于下表按角色指定路径，再点「保存选择」。</p>
           <p v-if="legacyBindingNotice" class="muted small">此前按目录保存的范围已停用，请按文件重新绑定。</p>
         </div>
         <h5 class="sync-subtitle">指定台账文件</h5>
@@ -91,13 +94,6 @@
               :value="item.id"
             />
           </el-select>
-          <el-button
-            :disabled="!shareId || !canSaveSelection"
-            :loading="savingSelection"
-            @click="onSaveSelection"
-          >
-            保存选择
-          </el-button>
         </div>
         <div v-if="dataHubLinked" class="sync-form sync-form--schedule">
           <span class="muted small">每日自动同步（上海）</span>
@@ -114,46 +110,30 @@
             :key="shareId"
             lazy
             show-checkbox
-            check-strictly
             node-key="path"
             :props="treeProps"
             :load="loadTreeNode"
             @check="onTreeCheck"
           />
           <p class="muted small sync-selection-hint">
-            勾选目录会自动勾选其下全部文件；保存与核对仍按「单文件 + 角色」绑定，不会按目录或文件名自动识别。
+            展开目录会把文件加入下方候选列表，可勾选目录缩小范围；按角色选路径即可，不必为每个勾选文件单独指定角色。
           </p>
-          <table v-if="selectedFiles.length" class="sync-runs-table">
-            <thead>
-              <tr>
-                <th>文件</th>
-                <th>角色</th>
-                <th>列模板</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="path in selectedFiles" :key="path">
-                <td>{{ path }}</td>
-                <td>
-                  <el-select
-                    :model-value="fileRoles[path] || ''"
-                    placeholder="选择角色"
-                    style="width: 180px"
-                    @update:model-value="setFileRole(path, String($event))"
-                  >
-                    <el-option
-                      v-for="item in LEDGER_ROLE_OPTIONS"
-                      :key="item.role"
-                      :label="item.label"
-                      :value="item.role"
-                    />
-                  </el-select>
-                </td>
-                <td>{{ templateLabelForRole(fileRoles[path] || '') }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-if="bindingDraftError" class="muted small">{{ bindingDraftError }}</p>
+          <p v-if="shareId" class="muted small sync-selection-hint">
+            候选路径 {{ candidatePaths.length }} 个 · 树上勾选 {{ selectedFiles.length }} 个 · 已绑定角色
+            {{ boundRoleCount }} / {{ LEDGER_ROLE_OPTIONS.length }}
+          </p>
+          <LedgerRoleBindingTable v-model="roleToPath" :candidate-files="candidatePaths" />
+          <div class="sync-form sync-form--edit sync-save-row">
+            <el-button
+              type="primary"
+              :disabled="!canSaveSelection"
+              :loading="savingSelection"
+              @click="onSaveSelection"
+            >
+              保存选择
+            </el-button>
+            <span v-if="saveDisabledHint" class="muted small">{{ saveDisabledHint }}</span>
+          </div>
         </div>
         <ul v-if="disabledShares.length" class="sync-hint muted small">
           <li v-for="item in disabledShares" :key="item.id">
@@ -337,26 +317,24 @@ import {
   type PreviewSummary,
 } from '@/api/ledger-sync'
 import {
-  bindingSaveError,
+  bindingSaveErrorFromRoleMap,
+  boundPathCount,
+  entriesFromRoleToPath,
   isCompleteBindingSelection,
   LEDGER_ROLE_OPTIONS,
   roleLabel,
-  templateIdForRole,
+  roleToPathFromEntries,
   templateLabelForRole,
 } from '@/views/data/ledger-bindings'
+import LedgerRoleBindingTable from '@/components/ledger-role-binding-table/ledger-role-binding-table.vue'
 import {
   canConfirmSync,
   explainSyncDisabled,
   isSameSelection,
-  isUnderPath,
   type PreviewFilter,
   type SavedLedgerSelection,
   type SyncSelectionPayload,
 } from '@/views/data/ledger-selection'
-import {
-  collectShareFilePaths,
-  filterFilesOutsideDirectory,
-} from '@/views/data/ledger-share-tree'
 import { request } from '@/utils/request'
 import LedgerSyncPreview from '@/components/ledger-sync-preview/ledger-sync-preview.vue'
 import SectionCard from '@/components/section-card/section-card.vue'
@@ -373,10 +351,26 @@ const router = useRouter()
 const shares = ref<LedgerShareItem[]>([])
 const shareId = ref('')
 const treeRef = ref<TreeInstance>()
-const selectedDirectories = ref<string[]>([])
 const selectedFiles = ref<string[]>([])
+const treeListedFiles = ref<string[]>([])
 const excludedPaths = ref<string[]>([])
-const fileRoles = ref<Record<string, string>>({})
+const roleToPath = ref<Record<string, string>>({})
+const boundRoleCount = computed(() => boundPathCount(roleToPath.value))
+const candidatePaths = computed(() => {
+  const set = new Set<string>()
+  for (const path of treeListedFiles.value) {
+    set.add(path)
+  }
+  for (const path of selectedFiles.value) {
+    set.add(path)
+  }
+  for (const path of Object.values(roleToPath.value)) {
+    if (path.trim()) {
+      set.add(path)
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
 const legacyBindingNotice = ref(false)
 const previewFilter = ref<PreviewFilter>('all')
 const savedSelection = ref<SavedLedgerSelection | null>(null)
@@ -404,20 +398,11 @@ const syncDiffs = ref<
 const diffLoading = ref(false)
 
 function applyPayloadToTreeState(payload: SyncSelectionPayload): void {
-  selectedDirectories.value = []
   excludedPaths.value = []
-  selectedFiles.value = payload.selectedEntries.filter((item) => item.kind === 'file').map((item) => item.path)
-  const roles: Record<string, string> = {}
-  for (const entry of payload.selectedEntries) {
-    if (entry.kind === 'file' && entry.role) {
-      roles[entry.path] = entry.role
-    }
-  }
-  fileRoles.value = roles
-}
-
-function setFileRole(path: string, role: string): void {
-  fileRoles.value = { ...fileRoles.value, [path]: role }
+  const paths = payload.selectedEntries.filter((item) => item.kind === 'file').map((item) => item.path)
+  selectedFiles.value = paths
+  treeListedFiles.value = [...new Set([...treeListedFiles.value, ...paths])]
+  roleToPath.value = roleToPathFromEntries(payload.selectedEntries)
 }
 
 function restoreTreeSelection(): void {
@@ -428,32 +413,36 @@ function restoreTreeSelection(): void {
   }
   restoringTree.value = true
   try {
-    tree.setCheckedKeys(payload.selectedEntries.map((item) => item.path))
+    tree.setCheckedKeys(
+      payload.selectedEntries.filter((item) => item.kind === 'file').map((item) => item.path),
+      true,
+    )
     for (const excluded of payload.excludedPaths) {
       const node = tree.getNode(excluded)
       if (node) {
-        tree.setChecked(excluded, false, false)
+        tree.setChecked(excluded, false, true)
       }
     }
-    const nodes = tree.getCheckedNodes(false, false) as TreeNodeData[]
-    selectedDirectories.value = nodes.filter((item) => item.kind === 'directory').map((item) => item.path)
-    selectedFiles.value = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
+    const nodes = tree.getCheckedNodes(true, false) as TreeNodeData[]
+    selectedFiles.value = nodes.map((item) => item.path)
   } finally {
     restoringTree.value = false
   }
 }
 
-watch(shareId, async (next) => {
+watch(shareId, async (next, prev) => {
+  if (prev !== undefined && next !== prev) {
+    treeListedFiles.value = []
+  }
   const draft =
     next && savedSelection.value?.shareId === next ? savedSelection.value.payload : null
   pendingTreeRestore.value = draft
   if (pendingTreeRestore.value) {
     applyPayloadToTreeState(pendingTreeRestore.value)
   } else {
-    selectedDirectories.value = []
     selectedFiles.value = []
     excludedPaths.value = []
-    fileRoles.value = {}
+    roleToPath.value = {}
   }
   await nextTick()
   await nextTick()
@@ -478,17 +467,39 @@ interface TreeNodeData {
 }
 
 const syncPayload = computed<SyncSelectionPayload>(() => ({
-  selectedEntries: selectedFiles.value.map((path) => {
-    const role = fileRoles.value[path]
-    return role
-      ? { path, kind: 'file' as const, role, template: templateIdForRole(role) }
-      : { path, kind: 'file' as const }
-  }),
+  selectedEntries: entriesFromRoleToPath(roleToPath.value),
   excludedPaths: [],
 }))
 
-const bindingDraftError = computed(() => bindingSaveError(selectedFiles.value, fileRoles.value))
-const canSaveSelection = computed(() => bindingDraftError.value === '')
+const bindingDraftError = computed(() => bindingSaveErrorFromRoleMap(roleToPath.value))
+const canSaveSelection = computed(
+  () => Boolean(shareId.value && dataHubLinked.value && bindingDraftError.value === ''),
+)
+const saveDisabledHint = computed(() => {
+  if (!dataHubLinked.value) {
+    return '请先连接 data-hub'
+  }
+  if (!shareId.value) {
+    return '请选择共享盘'
+  }
+  return bindingDraftError.value
+})
+const previewDisabledHint = computed(() => {
+  if (!dataHubLinked.value) {
+    return '请先连接 data-hub 后再保存绑定。'
+  }
+  if (!savedSelection.value) {
+    return '请在下表至少为一个角色选择文件，并点「保存选择」。'
+  }
+  if (!isCompleteBindingSelection(savedSelection.value.payload.selectedEntries)) {
+    return '已保存的绑定数据不完整，请重新指定角色后保存。'
+  }
+  const id = savedSelection.value.shareId
+  if (!readyShares.value.some((item) => item.id === id)) {
+    return '所保存的共享盘当前不可用。'
+  }
+  return ''
+})
 const selectionDirty = computed(() => {
   if (restoringTree.value || !savedSelection.value) {
     return false
@@ -526,8 +537,13 @@ async function loadTreeNode(
   const parentPath = node.level === 0 ? '' : node.data.path
   try {
     const data = await listShareDirectories(shareId.value, parentPath)
+    const rows = data.list ?? []
+    const listedFiles = rows.filter((item) => item.kind === 'file').map((item) => item.path)
+    if (listedFiles.length) {
+      treeListedFiles.value = [...new Set([...treeListedFiles.value, ...listedFiles])]
+    }
     resolve(
-      (data.list ?? []).map((item) => ({
+      rows.map((item) => ({
         path: item.path,
         name: item.name,
         kind: item.kind,
@@ -544,76 +560,21 @@ async function loadTreeNode(
     }
   }
   await nextTick()
-  restoreTreeSelection()
-}
-
-const expandingDirectory = ref(false)
-
-function applySelectedFiles(paths: string[]): void {
-  pendingTreeRestore.value = null
-  const unique = [...new Set(paths)]
-  selectedDirectories.value = []
-  selectedFiles.value = unique
-  const keep = new Set(unique)
-  const next: Record<string, string> = {}
-  for (const [path, role] of Object.entries(fileRoles.value)) {
-    if (keep.has(path)) {
-      next[path] = role
-    }
+  if (pendingTreeRestore.value) {
+    restoreTreeSelection()
+  } else if (!restoringTree.value) {
+    syncSelectionFromTree()
   }
-  fileRoles.value = next
 }
 
 function syncSelectionFromTree(): void {
-  const nodes = (treeRef.value?.getCheckedNodes(false, false) as TreeNodeData[] | undefined) ?? []
-  const files = nodes.filter((item) => item.kind === 'file').map((item) => item.path)
-  applySelectedFiles(files)
+  pendingTreeRestore.value = null
+  const nodes = (treeRef.value?.getCheckedNodes(true, false) as TreeNodeData[] | undefined) ?? []
+  selectedFiles.value = [...new Set(nodes.map((item) => item.path))]
 }
 
-async function onTreeCheck(data: TreeNodeData): Promise<void> {
-  if (restoringTree.value || expandingDirectory.value) {
-    return
-  }
-  const tree = treeRef.value
-  if (!tree || !shareId.value) {
-    return
-  }
-  if (data.kind === 'directory') {
-    const node = tree.getNode(data.path)
-    const isChecked = Boolean(node?.checked)
-    if (!isChecked) {
-      const remaining = filterFilesOutsideDirectory(selectedFiles.value, data.path)
-      for (const path of selectedFiles.value) {
-        if (isUnderPath(path, data.path)) {
-          tree.setChecked(path, false, false)
-        }
-      }
-      applySelectedFiles(remaining)
-      return
-    }
-    expandingDirectory.value = true
-    try {
-      const discovered = await collectShareFilePaths(shareId.value, data.path, listShareDirectories)
-      const merged = [...new Set([...selectedFiles.value, ...discovered])]
-      for (const path of discovered) {
-        tree.setChecked(path, true, false)
-      }
-      applySelectedFiles(merged)
-      if (!discovered.length) {
-        ElMessage.info('该目录下没有文件')
-      }
-    } catch (error) {
-      tree.setChecked(data.path, false, false)
-      if (request.isDataHubUnauthorized(error)) {
-        dataHubLinked.value = false
-        shares.value = []
-        shareId.value = ''
-      } else {
-        ElMessage.error('列出目录下文件失败，请稍后重试')
-      }
-    } finally {
-      expandingDirectory.value = false
-    }
+function onTreeCheck(): void {
+  if (restoringTree.value) {
     return
   }
   syncSelectionFromTree()
@@ -657,6 +618,15 @@ async function hydrateSavedSelection(): Promise<void> {
     savedSelection.value = null
     legacyBindingNotice.value = false
     if (cfg.shareId && Array.isArray(cfg.selectedEntries) && cfg.selectedEntries.length > 0) {
+      if (!shareId.value) {
+        shareId.value = cfg.shareId
+      }
+      roleToPath.value = roleToPathFromEntries(cfg.selectedEntries)
+      treeListedFiles.value = [
+        ...new Set(
+          cfg.selectedEntries.filter((item) => item.kind === 'file').map((item) => item.path),
+        ),
+      ]
       if (!isCompleteBindingSelection(cfg.selectedEntries)) {
         legacyBindingNotice.value = true
         return
@@ -669,9 +639,6 @@ async function hydrateSavedSelection(): Promise<void> {
         shareId: cfg.shareId,
         payload,
         savedAt: cfg.updatedAt ?? new Date().toISOString(),
-      }
-      if (!shareId.value) {
-        shareId.value = cfg.shareId
       }
     }
   } catch {
@@ -752,10 +719,9 @@ async function onUnlinkDataHub(): Promise<void> {
     dataHubLinked.value = false
     shares.value = []
     shareId.value = ''
-    selectedDirectories.value = []
     selectedFiles.value = []
     excludedPaths.value = []
-    fileRoles.value = {}
+    roleToPath.value = {}
     previewResult.value = null
     savedSelection.value = null
     legacyBindingNotice.value = false
@@ -1121,6 +1087,11 @@ function jumpDiff(row: (typeof syncDiffs.value)[number]): void {
 }
 .sync-form--edit {
   margin-top: 6px;
+}
+.sync-save-row {
+  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .sync-preview-hint {
   margin-left: 4px;
